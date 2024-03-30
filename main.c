@@ -171,7 +171,7 @@ int main(void) {
   int action = 0;
   
   while(1) {
-    printf("Socket Concurrent TCP\n");
+    printf("Socket Concurrent TCP - Server\n\n");
     printf("1. Adicionar uma musica\n");
     printf("2. Remover uma musica\n");
     printf("3. Listar musicas por ano\n");
@@ -179,8 +179,8 @@ int main(void) {
     printf("5. Listar musicas por tipo\n");
     printf("6. Consultar musica por ID\n");
     printf("7. Listar todas as musicas\n");
-    printf("8. Encerrar\n");
-    printf("Escolha uma ação: [n]\n");
+    printf("8. Encerrar\n\n");
+    printf("Escolha uma ação [n]: ");
     scanf("%d", &action);
 
     switch (action) {
@@ -209,6 +209,6 @@ int main(void) {
         exit(0);
     }
   }
-  
+
   return 0;
 }
