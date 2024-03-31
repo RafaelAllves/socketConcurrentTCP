@@ -3,4 +3,4 @@ This repository houses the source code of a music server system designed to acco
 
 ## Instructions
 
-Compile with `gcc -o [executable_name] [source_file].c`
+Compile with `gcc -o [executable_name].exe [source_file].c`
