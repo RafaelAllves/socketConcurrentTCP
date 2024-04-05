@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdarg.h>
 
+const int DEBUG = 1;
+
 struct Music {
   int id;
   char title[100];
@@ -13,25 +15,80 @@ struct Music {
   int year;
 };
 
-
 struct Musics {
   struct Music musics[100];
   int n;
 };
 
 void send_to_client(int connfd, const char *format, ...) {
-    char message[100];
-    va_list args;
+  char message[100];
+  va_list args;
 
-    va_start(args, format);
-    vsnprintf(message, sizeof(message), format, args);
-    va_end(args);
+  va_start(args, format);
+  vsnprintf(message, sizeof(message), format, args);
+  va_end(args);
 
-    if (send(connfd, message, strlen(message), 0) == -1) {
-        perror("send");
-    }
+  if (DEBUG) {
+    printf("%s", message);
+  }
+
+  // if (send(connfd, message, strlen(message), 0) == -1) {
+  //     perror("send");
+  // }
 }
 
+int update_database(struct Musics *musics)
+{
+  FILE* outfile;
+
+  // open file for writing
+  outfile = fopen("db.bin", "wb");
+  if (outfile == NULL) {
+    printf("\nO banco de dados nao pode ser carregado/criado!\n");
+    exit(1);
+  }
+
+  // write struct to file
+  int flag = fwrite(musics, sizeof(struct Musics), 1, outfile);
+
+  // close file
+  fclose(outfile);
+
+  if (!flag)
+    printf("Erro ao salvar alterações no banco de dados! Tente novamente.\n");
+
+  return 0;
+}
+
+void read_database(struct Musics *musics)
+{
+  FILE* infile;
+
+  // open file for reading
+  infile = fopen("db.bin", "rb");
+  if (infile == NULL) {
+    printf("Banco de dados nao encontrado! Um novo arquivo sera gerado!\n");
+    return;
+  }
+
+  // read struct from file
+  int flag = fread(musics, sizeof(struct Musics), 1, infile);
+
+  fclose(infile);
+
+  if (flag == -1) {
+    printf("Erro ao carregar banco de dados!\n");
+    exit(1);
+  }
+}
+
+void pause(int connfd) {
+  // remove all \n from stdin
+  while( getchar() != '\n');
+
+  send_to_client(connfd, "Pressione ENTER para retornar ao menu principal...");
+  while( getchar() != '\n');
+}
 
 void add_song(int connfd, struct Musics *musics) {
   char answer;
@@ -54,7 +111,7 @@ void add_song(int connfd, struct Musics *musics) {
     send_to_client(connfd, "Genero musical: ");
     scanf(" %[^\n]", music.type);
     
-    send_to_client(connfd, "Possui refrão? [s/n] ");
+    send_to_client(connfd, "Possui refrão? (s/n) ");
     scanf(" %c", &answer);
     
     if (answer == 's') {
@@ -70,13 +127,15 @@ void add_song(int connfd, struct Musics *musics) {
     musics -> musics[musics->n] = music;
     musics->n++;
 
-    send_to_client(connfd, "Musica adicionada com sucesso! Deseja adicionar mais musicas? [s/n] ");
+    send_to_client(connfd, "Musica adicionada com sucesso! Deseja adicionar mais musicas? (s/n) ");
     scanf(" %c", &answer);
     
     if (answer == 'n') {
       break;
     }
-  }  
+  }
+
+  update_database(musics); 
 };
 
 
@@ -91,7 +150,7 @@ void remove_song(int connfd, struct Musics *musics) {
     // code
     send_to_client(connfd, "%d", removeId);
 
-    send_to_client(connfd, "Musica removida com sucesso! Deseja remover mais musicas? [s/n] ");
+    send_to_client(connfd, "Musica removida com sucesso! Deseja remover mais musicas? (s/n) ");
     scanf(" %c", &answer);
 
     if (answer == 'n') {
@@ -109,7 +168,7 @@ void list_by_year(int connfd, struct Musics *musics) {
 
   // code
   send_to_client(connfd, "%d", yearList);
-
+  pause(connfd);
 };
 
 
@@ -124,7 +183,7 @@ void list_by_year_and_language(int connfd, struct Musics *musics) {
 
   // code
   send_to_client(connfd, "%d %s", yearList, languageList);
-  
+  pause(connfd);
 };
 
 
@@ -137,6 +196,7 @@ void list_by_type(int connfd, struct Musics *musics) {
   // code
   send_to_client(connfd, "%s", typeList);
 
+  pause(connfd);
 };
 
 
@@ -150,6 +210,7 @@ void search_by_id(int connfd, struct Musics *musics) {
     if (searchId > 0 && searchId < musics->n){
       break;
     }
+    send_to_client(connfd, "ID invalido. Tente novamente.\n");
   }
   
   send_to_client(connfd, "Identificador Unico: %d\n", musics -> musics[searchId].id);
@@ -160,6 +221,7 @@ void search_by_id(int connfd, struct Musics *musics) {
   send_to_client(connfd, "Refrão: %s\n", musics -> musics[searchId].chore);
   send_to_client(connfd, "Ano de lancamento: %d\n\n", musics -> musics[searchId].year);
 
+  pause(connfd);
 };
 
 
@@ -167,24 +229,27 @@ void list_all(int connfd, struct Musics *musics){
   send_to_client(connfd, "\nLista de todas as Musicas:\n");
 
   for (int i = 0; i < musics -> n; i++) {
-      send_to_client(connfd, "Identificador Unico: %d\n", musics -> musics[i].id);
-      send_to_client(connfd, "Titulo: %s\n", musics -> musics[i].title);
-      send_to_client(connfd, "Interprete: %s\n", musics -> musics[i].artist);
-      send_to_client(connfd, "Idioma: %s\n", musics -> musics[i].language);
-      send_to_client(connfd, "Genero musical: %s\n", musics -> musics[i].type);
-      send_to_client(connfd, "Refrão: %s\n", musics -> musics[i].chore);
-      send_to_client(connfd, "Ano de lancamento: %d\n\n", musics -> musics[i].year);
+    send_to_client(connfd, "Identificador Unico: %d\n", musics -> musics[i].id);
+    send_to_client(connfd, "Titulo: %s\n", musics -> musics[i].title);
+    send_to_client(connfd, "Interprete: %s\n", musics -> musics[i].artist);
+    send_to_client(connfd, "Idioma: %s\n", musics -> musics[i].language);
+    send_to_client(connfd, "Genero musical: %s\n", musics -> musics[i].type);
+    send_to_client(connfd, "Refrão: %s\n", musics -> musics[i].chore);
+    send_to_client(connfd, "Ano de lancamento: %d\n\n", musics -> musics[i].year);
   }
-}
 
+  pause(connfd);
+}
 
 int serve_client(char* clientIp, int connfd) {
   struct Musics musics;
   musics.n = 0;
   int action = 0;
+
+  read_database(&musics);
   
   while(1) {
-    send_to_client(connfd, "Socket Concurrent TCP - Server\n\n");
+    send_to_client(connfd, "\n - - - - - -  Socket Concurrent TCP  - - - - - -\n\n");
     send_to_client(connfd, "1. Adicionar uma musica\n");
     send_to_client(connfd, "2. Remover uma musica\n");
     send_to_client(connfd, "3. Listar musicas por ano\n");
@@ -193,7 +258,7 @@ int serve_client(char* clientIp, int connfd) {
     send_to_client(connfd, "6. Consultar musica por ID\n");
     send_to_client(connfd, "7. Listar todas as musicas\n");
     send_to_client(connfd, "8. Encerrar\n\n");
-    send_to_client(connfd, "Escolha uma ação [n]: ");
+    send_to_client(connfd, "Escolha uma ação (numero): ");
     scanf("%d", &action);
 
     switch (action) {
@@ -224,4 +289,9 @@ int serve_client(char* clientIp, int connfd) {
   }
 
   return 0;
+}
+
+//debug
+int main() {
+  serve_client("127.0.0.1", 8080);
 }
