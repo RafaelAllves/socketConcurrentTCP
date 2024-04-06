@@ -3,17 +3,24 @@ This repository houses the source code of a music server system designed to acco
 
 ## Compilation and Execution
 
+### Dependencies
+
+To compile the server SQLite3 will be needed, to install it simply run:
+```bash
+  sudo apt-get install libsqlite3-dev
+```
+
 ### Compiling the Server
 
 To compile the server, you can use the `gcc` compiler as follows:
 ```bash
-  gcc -o <executable_name>.exe <source_file>.c
+  gcc -o <executable_name>.exe <source_file>.c <dependencies>
 ```
 Replace <executable_name> with the desired name of the executable and <source_file> with the name of the source file.
 
 Example:
 ```bash
-  gcc -o server server.c
+  gcc -o serv system.c -lsqlite3
 ```
 
 This will generate an executable file called server.
