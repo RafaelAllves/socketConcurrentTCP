@@ -1,7 +1,7 @@
 # socketConcurrentTCP
 This repository houses the source code of a music server system designed to accommodate multiple users concurrently. At its core, the project entails the implementation of a concurrent server using TCP sockets to facilitate client-server communication.
 
-At the current development point, the server is capable of handling the following actions at the server side:
+At the current development point, the server is capable of handling the following actions:
 - Inclusion of music data
 - Removal of music data
 - Preview listing by year filter
@@ -29,12 +29,12 @@ Replace *<executable_name>* with the desired name of the executable, *<source_fi
 
 Example:
 ```bash
-  gcc -o server.exe system.c -lsqlite3
+  gcc -o server.exe server.c -lsqlite3
 ```
 
 This will generate an executable file called server. 
 
-Further modifications can be made for it to run as a local standalone prgram too. For it, just set `DEBUG` variable to 1, unncomment the <b>main</b> function and comment the 3 lines who refers to the call of <b>send</b> function inside the <b>send_to_client</b> function.
+<b>PS.</b> Further modifications can be made in its system for it to run as a standalone prgram in local mode too. For it, just go to `system.c` file, set the `DEBUG` flag to 1, unncomment the <b>main()</b> function at the end of the file and, comment the code sections marked as "Comment for standalone". Then do it's compilation with `gcc -o local_system.exe system.c -lsqlite3`
 
 ### Running the Server
 To run the server, simply type the following command:
@@ -50,7 +50,7 @@ Example:
 ```
 The server will now be listening for connections on the specified port.
 
-## Customer Connection
+## Client Connection
 To connect to the server, you can use any TCP client. Here is an example using telnet:
 
 ```bash
@@ -64,4 +64,4 @@ Example:
 ```
 This will connect to the server running on the local machine on port 3490.
 
-After successful connection, you can interact with the server as needed.
+After successful connection, you can interact with the server as intended.

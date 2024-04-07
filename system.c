@@ -37,10 +37,12 @@ void send_to_client(int connfd, const char *format, ...) {
 
     if (DEBUG)
         printf("%s", message);
-
+    
+    // Comment for standalone
     if (send(connfd, message, strlen(message), 0) == -1) {
         perror("send");
     }
+    // Comment for standalone - END
 }
 
 void listen_for_client(int connfd, const char *format, ...) {
@@ -52,7 +54,9 @@ void listen_for_client(int connfd, const char *format, ...) {
     while(1) {
         fflush(stdin);
 
+        // Comment for standalone
         recv(connfd, buffer, sizeof(buffer), 0);
+        // Comment for standalone - END
 
         if (DEBUG) {
             fgets(buffer, sizeof(buffer), stdin);
@@ -235,6 +239,8 @@ void add_song(int connfd) {
     musics.n = 0;
 
     while (1) {
+        strcpy(&answer, "\0");
+
         struct Music *music = (struct Music *)malloc(sizeof(struct Music));
         if (music == NULL) {
             send_to_client(connfd, "\nErro ao alocar memoria para nova musica!\n\n");
@@ -474,7 +480,7 @@ int serve_client(char *clientIp, int connfd) {
     return 0;
 }
 
-// debug
+// Unccomment for standalone
 // int main() {
 //     serve_client("127.0.0.1", 8080);
 // }
