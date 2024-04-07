@@ -62,8 +62,6 @@ void listen_for_client(int connfd, const char *format, ...) {
             fgets(buffer, sizeof(buffer), stdin);
         }
 
-        //inserir mais regras de validacao aqui
-
         if (vsscanf(buffer, format, args) < 1) {
             send_to_client(connfd, "\nValor invalido! Tente novamente.\n");
         } else {
