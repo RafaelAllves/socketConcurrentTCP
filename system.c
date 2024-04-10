@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-const int DEBUG = 1;
+const int DEBUG = 0;
 const char DB_NAME[] = "dev.db";
 
 /* Data types */
@@ -28,7 +28,7 @@ struct Musics {
 /* Communication with client */
 
 void send_to_client(int connfd, const char *format, ...) {
-    char message[100];
+    char message[1024];
     va_list args;
 
     va_start(args, format);
@@ -42,6 +42,7 @@ void send_to_client(int connfd, const char *format, ...) {
     if (send(connfd, message, strlen(message), 0) == -1) {
         perror("send");
     }
+    memset(message, 0, sizeof(message));
     // Comment for standalone - END
 }
 
@@ -50,7 +51,7 @@ void listen_for_client(int connfd, const char *format, ...) {
 
     va_list args;
     va_start(args, format);
-    
+
     while(1) {
         fflush(stdin);
 
@@ -63,13 +64,12 @@ void listen_for_client(int connfd, const char *format, ...) {
         }
 
         if (vsscanf(buffer, format, args) < 1) {
-            send_to_client(connfd, "\nValor invalido! Tente novamente.\n");
+            send_to_client(connfd, "\nValor invalido! Tente novamente::\n");
         } else {
             break;
         }
     }
-    
-
+    memset(buffer, 0, sizeof(buffer));
 }
 
 /* Interation with database */
@@ -210,22 +210,24 @@ void db_initialize(int connfd) {
 /* Utils */
 
 void screen_pause(int connfd) {
-    send_to_client(connfd, "\nPressione ENTER para retornar ao menu principal...");
-    while (getchar() != '\n');
+    char input[256];
+    
+    send_to_client(connfd, "\nPressione 1 para retornar ao menu principal::\n");
+
+    listen_for_client(connfd, "%s", input);
+    memset(input, 0, sizeof(input));
+
 }
 
 void show_music_preview(int connfd, struct Music *music) {
-    send_to_client(connfd, "\nIdentificador Unico: %d\n", music->id);
-    send_to_client(connfd, "Titulo: %s\n", music->title);
-    send_to_client(connfd, "Interprete: %s\n", music->artist);
+    send_to_client(connfd, "\nIdentificador Unico: %d\nTitulo: %s\nInterprete: %s\n", music->id, music->title, music->artist);
+
 }
 
 void show_music(int connfd, struct Music *music) {
     show_music_preview(connfd, music);
-    send_to_client(connfd, "Idioma: %s\n", music->language);
-    send_to_client(connfd, "Genero musical: %s\n", music->type);
-    send_to_client(connfd, "Refrão: %s\n", music->chore);
-    send_to_client(connfd, "Ano de lancamento: %d\n\n", music->year);
+    send_to_client(connfd, "Idioma: %s\nGenero musical: %s\nRefrão: %s\nAno de lançamento: %d\n\n", music->language, music->type, music->chore, music->year);
+
 }
 
 /* Specified Functions */
@@ -247,40 +249,40 @@ void add_song(int connfd) {
 
         music->id = ++musics.n;
 
-        send_to_client(connfd, "\nPreencha os seguintes campos para adicionar uma musica:\n\n");
+        send_to_client(connfd, "\nPreencha os seguintes campos para adicionar uma musica.\n");
 
-        send_to_client(connfd, "Titulo: ");
+        send_to_client(connfd, "Titulo::\n");
         listen_for_client(connfd, " %[^\n]", music->title);
 
-        send_to_client(connfd, "Interprete: ");
+        send_to_client(connfd, "Interprete::\n");
         listen_for_client(connfd, " %[^\n]", music->artist);
 
-        send_to_client(connfd, "Idioma: ");
+        send_to_client(connfd, "Idioma::\n");
         listen_for_client(connfd, " %[^\n]", music->language);
 
-        send_to_client(connfd, "Genero musical: ");
+        send_to_client(connfd, "Genero musical::\n");
         listen_for_client(connfd, " %[^\n]", music->type);
 
         while (answer != 's' && answer != 'n') {
-            send_to_client(connfd, "Possui refrão? (s/n) ");
+            send_to_client(connfd, "Possui refrão? (s/n)::\n");
             listen_for_client(connfd, " %c", &answer);
 
             if (answer == 's') {
-                send_to_client(connfd, "Insira o Refrão: ");
+                send_to_client(connfd, "Insira o Refrão::\n");
                 listen_for_client(connfd, " %[^\n]", music->chore);
             } else {
                 strcpy(music->chore, "Não possui");
             }
         }        
 
-        send_to_client(connfd, "Ano de lancamento: ");
+        send_to_client(connfd, "Ano de lancamento::\n");
         listen_for_client(connfd, " %d", &music->year);
 
         music->next = musics.musics;
 
         musics.musics = music;
 
-        send_to_client(connfd, "\nMusica adicionada com sucesso! Deseja adicionar mais musicas? (s/n) ");
+        send_to_client(connfd, "\nMusica adicionada com sucesso! Deseja adicionar mais musicas? (s/n)::\n");
         listen_for_client(connfd, " %c", &answer);
 
         if (answer == 'n')
@@ -296,7 +298,7 @@ void remove_song(int connfd) {
     struct Musics musics;
     db_fetch(connfd, &musics);
 
-    send_to_client(connfd, "\nInsira o ID da musica a ser removida: ");
+    send_to_client(connfd, "\nInsira o ID da musica a ser removida::\n");
     listen_for_client(connfd, " %d", &removeId);
     
     while(musics.musics != NULL && musics.musics->id != removeId)
@@ -318,7 +320,7 @@ void list_by_year(int connfd) {
     struct Musics musics;
     db_fetch(connfd, &musics);
 
-    send_to_client(connfd, "\nInsira o ano de lancamento da musica: ");
+    send_to_client(connfd, "\nInsira o ano de lancamento da musica::\n");
     listen_for_client(connfd, " %d", &yearList);
 
     while(musics.musics != NULL) {
@@ -330,8 +332,9 @@ void list_by_year(int connfd) {
         musics.musics = musics.musics->next;
     }
 
-    if (!found)
+    if (!found) {
         send_to_client(connfd, "\nNao foram encontradas musicas com esse ano de lancamento!\n\n");
+    }
 
     screen_pause(connfd);
 };
@@ -343,9 +346,9 @@ void list_by_year_and_language(int connfd) {
     struct Musics musics;
     db_fetch(connfd, &musics);
 
-    send_to_client(connfd, "\nInsira o ano de lancamento da musica: ");
+    send_to_client(connfd, "\nInsira o ano de lancamento da musica::\n");
     listen_for_client(connfd, " %d", &yearList);
-    send_to_client(connfd, "\nInsira o idioma da musica: ");
+    send_to_client(connfd, "\nInsira o idioma da musica::\n");
     listen_for_client(connfd, " %[^\n]", languageList);
 
     while(musics.musics != NULL) {
@@ -369,7 +372,7 @@ void list_by_type(int connfd) {
     struct Musics musics;
     db_fetch(connfd, &musics);
 
-    send_to_client(connfd, "\nInsira o genero musical: ");
+    send_to_client(connfd, "\nInsira o genero musical::\n");
     listen_for_client(connfd, " %[^\n]", typeList);
 
     while(musics.musics != NULL) {
@@ -393,7 +396,7 @@ void search_by_id(int connfd) {
     db_fetch(connfd, &musics);
 
     while (1) {
-        send_to_client(connfd, "\nInsira o ID da musica: ");
+        send_to_client(connfd, "\nInsira o ID da musica::\n");
         listen_for_client(connfd, " %d", &searchId);
 
         if (searchId >= 0 && searchId <= musics.n)
@@ -418,7 +421,7 @@ void list_all(int connfd) {
     struct Musics musics;
     db_fetch(connfd, &musics);
 
-    send_to_client(connfd, "\nLista de todas as Musicas:\n");
+    // send_to_client(connfd, "\nLista de todas as Musicas\n");
 
     while (musics.musics != NULL) {
         show_music(connfd, musics.musics);
@@ -435,16 +438,17 @@ int serve_client(char *clientIp, int connfd) {
     int action = 0;
 
     while (1) {
-        send_to_client(connfd, "\n - - - - - -  Socket Concurrent TCP  - - - - - -\n\n");
-        send_to_client(connfd, "1. Adicionar uma musica\n");
-        send_to_client(connfd, "2. Remover uma musica\n");
-        send_to_client(connfd, "3. Listar musicas por ano\n");
-        send_to_client(connfd, "4. Listar musicas por ano e idioma\n");
-        send_to_client(connfd, "5. Listar musicas por genero\n");
-        send_to_client(connfd, "6. Consultar musica por ID\n");
-        send_to_client(connfd, "7. Listar todas as musicas\n");
-        send_to_client(connfd, "8. Encerrar\n\n");
-        send_to_client(connfd, "Escolha uma ação (numero): ");
+        send_to_client(connfd, "\n - - - - - -  Socket Concurrent TCP  - - - - - -\n\n"
+                        "1. Adicionar uma musica\n"
+                        "2. Remover uma musica\n"
+                        "3. Listar musicas por ano\n"
+                        "4. Listar musicas por ano e idioma\n"
+                        "5. Listar musicas por genero\n"
+                        "6. Consultar musica por ID\n"
+                        "7. Listar todas as musicas\n"
+                        "8. Encerrar\n\n"
+                        "Escolha uma ação (numero)::\n");
+
         
         listen_for_client(connfd, " %d", &action);
 
@@ -473,12 +477,8 @@ int serve_client(char *clientIp, int connfd) {
             case 8:
                 exit(0);
         }
+        memset(&action, 0, sizeof(action));
     }
 
     return 0;
 }
-
-// Unccomment for standalone
-// int main() {
-//     serve_client("127.0.0.1", 8080);
-// }
