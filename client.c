@@ -45,6 +45,7 @@ void receive_from_server(int sockfd) {
         if (bytes_received <= 0) {
             if (bytes_received == 0) {
                 printf("Conexão encerrada pelo servidor.\n");
+                exit(0);
             } else {
                 perror("recv");
             }
