@@ -94,7 +94,7 @@ int main(void) {
             continue;
         }
 
-        char admin_flag = '0'; // '1' for admin, '0' for normal user
+        char admin_flag = '1'; // '1' for admin, '0' for normal user
         if (send(sockfd, &admin_flag, 1, 0) == -1) {
             perror("send");
         }

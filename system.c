@@ -439,6 +439,49 @@ int serve_client(char *clientIp, int connfd) {
 
     while (1) {
         send_to_client(connfd, "\n - - - - - -  Socket Concurrent TCP  - - - - - -\n\n"
+                        "1. Listar musicas por ano\n"
+                        "2. Listar musicas por ano e idioma\n"
+                        "3. Listar musicas por genero\n"
+                        "4. Consultar musica por ID\n"
+                        "5. Listar todas as musicas\n"
+                        "6. Encerrar\n\n"
+                        "Escolha uma ação (numero)::\n");
+
+        
+        listen_for_client(connfd, " %d", &action);
+
+        switch (action) {
+            case 1:
+                list_by_year(connfd);
+                break;
+            case 2:
+                list_by_year_and_language(connfd);
+                break;
+            case 3:
+                list_by_type(connfd);
+                break;
+            case 4:
+                search_by_id(connfd);
+                break;
+            case 5:
+                list_all(connfd);
+                break;
+            case 6:
+                exit(0);
+        }
+        memset(&action, 0, sizeof(action));
+    }
+
+    return 0;
+}
+
+
+int serve_client_admin(char *clientIp, int connfd) {
+    db_initialize(connfd);
+    int action = 0;
+
+    while (1) {
+        send_to_client(connfd, "\n - - - - - -  Socket Concurrent TCP  - - - - - -\n\n"
                         "1. Adicionar uma musica\n"
                         "2. Remover uma musica\n"
                         "3. Listar musicas por ano\n"
