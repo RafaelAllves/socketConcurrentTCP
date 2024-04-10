@@ -50,18 +50,53 @@ Example:
 ```
 The server will now be listening for connections on the specified port.
 
-## Client Connection
-To connect to the server, you can use any TCP client. Here is an example using telnet:
 
+
+
+
+
+
+### Compiling the Clients
+
+To compile the server, you can use the `gcc` compiler as follows:
+
+For normal users (read only):
 ```bash
-  telnet <IP_DO_SERVIDOR> <PORTA_DO_SERVIDOR>
+  gcc -o <executable_name>.exe client.c
 ```
-Replace <SERVER_IP> with the IP address of the server and <SERVER_PORT> with the port the server is listening on.
+
+For admin (read and write): 
+```bash
+  gcc -o <executable_name>.exe admin.c
+```
+Replace *<executable_name>* with the desired name of the executable.
 
 Example:
 ```bash
-  telnet 127.0.0.1 3490
+  gcc -o client.exe client.c
 ```
-This will connect to the server running on the local machine on port 3490.
+```bash
+  gcc -o admin.exe admin.c
+```
+This will generate an executable file called client.exe for normal users (read only) and admin.exe for admin users (read and write).
+
+
+### Running the Clients
+
+To run the clients, simply type the following command:
+
+```bash
+  ./<executable_name>.exe
+```
+Replace <executable_name> with the name of the executable
+
+Example:
+```bash
+  ./client.exe
+```
+```bash
+  ./admin.exe
+```
+
 
 After successful connection, you can interact with the server as intended.
