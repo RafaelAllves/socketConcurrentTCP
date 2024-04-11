@@ -34,7 +34,7 @@ Example:
 
 This will generate an executable file called server. 
 
-<b>PS.</b> Further modifications can be made in its system for it to run as a standalone prgram in local mode too. For it, just go to `system.c` file, set the `DEBUG` flag to 1, unncomment the <b>main()</b> function at the end of the file and, comment the code sections marked as "Comment for standalone". Then do it's compilation with `gcc -o local_system.exe system.c -lsqlite3`
+<b>PS.</b> Further modifications can be made in its system for it to run as a standalone program in local mode too. For it, just go to `system.c` file, set the `DEBUG` flag to 1 to activate its local output, comment the code sections marked as "Comment for standalone" and write a <b>main</b> function to call `serve_client_admin` with a mock ip and port. Then compile it with `gcc -o local_system.exe system.c -lsqlite3`.
 
 ### Running the Server
 To run the server, simply type the following command:
@@ -48,20 +48,55 @@ Example:
 ```bash
   ./server.exe
 ```
-The server will now be listening for connections on the specified port.
+The server will now be listening for connections on the specified port. The default port is set to 3490.
 
-## Client Connection
-To connect to the server, you can use any TCP client. Here is an example using telnet:
 
+
+
+
+
+
+### Compiling the Clients
+
+To compile the clients, you can use the `gcc` compiler as follows:
+
+For normal users (read only):
 ```bash
-  telnet <IP_DO_SERVIDOR> <PORTA_DO_SERVIDOR>
+  gcc -o <executable_name>.exe client.c
 ```
-Replace <SERVER_IP> with the IP address of the server and <SERVER_PORT> with the port the server is listening on.
+
+For admin (read and write): 
+```bash
+  gcc -o <executable_name>.exe admin.c
+```
+Replace *<executable_name>* with the desired name of the executable.
 
 Example:
 ```bash
-  telnet 127.0.0.1 3490
+  gcc -o client.exe client.c
 ```
-This will connect to the server running on the local machine on port 3490.
+```bash
+  gcc -o admin.exe admin.c
+```
+This will generate an executable file called client.exe for normal users (read only) and admin.exe for admin users (read and write permissions).
+
+
+### Running the Clients
+
+To run the clients, simply type the following command:
+
+```bash
+  ./<executable_name>.exe
+```
+Replace <executable_name> with the name of the executable
+
+Example:
+```bash
+  ./client.exe
+```
+```bash
+  ./admin.exe
+```
+
 
 After successful connection, you can interact with the server as intended.
