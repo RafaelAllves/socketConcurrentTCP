@@ -34,7 +34,7 @@ Example:
 
 This will generate an executable file called server. 
 
-<b>PS.</b> Further modifications can be made in its system for it to run as a standalone prgram in local mode too. For it, just go to `system.c` file, set the `DEBUG` flag to 1, unncomment the <b>main()</b> function at the end of the file and, comment the code sections marked as "Comment for standalone". Then do it's compilation with `gcc -o local_system.exe system.c -lsqlite3`
+<b>PS.</b> Further modifications can be made in its system for it to run as a standalone program in local mode too. For it, just go to `system.c` file, set the `DEBUG` flag to 1 to activate its local output, comment the code sections marked as "Comment for standalone" and write a <b>main</b> function to call `serve_client_admin` with a mock ip and port. Then compile it with `gcc -o local_system.exe system.c -lsqlite3`.
 
 ### Running the Server
 To run the server, simply type the following command:
@@ -48,7 +48,7 @@ Example:
 ```bash
   ./server.exe
 ```
-The server will now be listening for connections on the specified port.
+The server will now be listening for connections on the specified port. The default port is set to 3490.
 
 
 
@@ -58,7 +58,7 @@ The server will now be listening for connections on the specified port.
 
 ### Compiling the Clients
 
-To compile the server, you can use the `gcc` compiler as follows:
+To compile the clients, you can use the `gcc` compiler as follows:
 
 For normal users (read only):
 ```bash
@@ -78,7 +78,7 @@ Example:
 ```bash
   gcc -o admin.exe admin.c
 ```
-This will generate an executable file called client.exe for normal users (read only) and admin.exe for admin users (read and write).
+This will generate an executable file called client.exe for normal users (read only) and admin.exe for admin users (read and write permissions).
 
 
 ### Running the Clients
