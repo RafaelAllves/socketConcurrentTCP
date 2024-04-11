@@ -66,17 +66,22 @@ void receive_from_server(int sockfd) {
 }
 
 
-int main(void) {
+int main(int argc, char *argv[]) {
     int sockfd;
     struct addrinfo hints, *servinfo, *p;
     int rv;
     char s[INET6_ADDRSTRLEN];
+    char *server_ip = "localhost";
+
+    if (argc > 2 && strcmp(argv[1], "-i") == 0) {
+        server_ip = argv[2];
+    }
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
-    if ((rv = getaddrinfo("localhost", PORT, &hints, &servinfo)) != 0) {
+    if ((rv = getaddrinfo(server_ip, PORT, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return 1;
     }

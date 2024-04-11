@@ -86,16 +86,16 @@ This will generate an executable file called client.exe for normal users (read o
 To run the clients, simply type the following command:
 
 ```bash
-  ./<executable_name>.exe
+  ./<executable_name>.exe -i <server_machines_ip>
 ```
-Replace <executable_name> with the name of the executable
+Replace <executable_name> with the name of the executable and `<server_machines_ip>` with the IP where the server will be running. In the case where `-i <server_machines_ip>` is not specified `localhost` will be used as IP.
 
 Example:
 ```bash
-  ./client.exe
+  ./client.exe -i 127.0.0.1
 ```
 ```bash
-  ./admin.exe
+  ./admin.exe -i 127.0.0.1
 ```
 
 
