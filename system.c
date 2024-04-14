@@ -28,7 +28,7 @@ struct Musics {
 /* Communication with client */
 
 void send_to_client(int connfd, const char *format, ...) {
-    char message[2048];
+    char message[2048] = "\0";
     va_list args;
 
     va_start(args, format);
@@ -47,7 +47,7 @@ void send_to_client(int connfd, const char *format, ...) {
 }
 
 void listen_for_client(int connfd, const char *format, ...) {
-    char buffer[256];
+    char buffer[256] = "\0";
 
     va_list args;
     va_start(args, format);
@@ -210,7 +210,7 @@ void db_initialize(int connfd) {
 /* Utils */
 
 void screen_pause(int connfd) {
-    char input[256];
+    char input[256] = "\0";
     
     send_to_client(connfd, "\nPressione 1 para retornar ao menu principal::\n");
 
@@ -233,7 +233,7 @@ void show_music(int connfd, struct Music *music) {
 /* Specified Functions */
 
 void add_song(int connfd) {
-    char answer;
+    char answer = '\0';
     struct Musics musics;
     musics.musics = NULL;
     musics.n = 0;
@@ -293,8 +293,8 @@ void add_song(int connfd) {
 };
 
 void remove_song(int connfd) {
-    char answer;
-    int removeId;
+    char answer = '\0';
+    int removeId = -1;
     struct Musics musics;
     db_fetch(connfd, &musics);
 
@@ -315,7 +315,7 @@ void remove_song(int connfd) {
 
 void list_by_year(int connfd) {
     int found = 0;
-    int yearList;
+    int yearList = -1;
 
     struct Musics musics;
     db_fetch(connfd, &musics);
@@ -341,8 +341,8 @@ void list_by_year(int connfd) {
 
 void list_by_year_and_language(int connfd) {
     int found = 0;
-    int yearList;
-    char languageList[50];
+    int yearList = -1;
+    char languageList[50] = "\0";
     struct Musics musics;
     db_fetch(connfd, &musics);
 
@@ -368,7 +368,7 @@ void list_by_year_and_language(int connfd) {
 
 void list_by_type(int connfd) {
     int found = 0;
-    char typeList[50];
+    char typeList[50] = "\0";
     struct Musics musics;
     db_fetch(connfd, &musics);
 
@@ -391,7 +391,7 @@ void list_by_type(int connfd) {
 };
 
 void search_by_id(int connfd) {
-    int searchId;
+    int searchId = -1;
     struct Musics musics;
     db_fetch(connfd, &musics);
 

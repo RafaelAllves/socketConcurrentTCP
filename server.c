@@ -31,14 +31,14 @@ void *get_socket_address(struct sockaddr *sa)
 
 int main(void)
 {
-    int server_socket, client_socket;
+    int server_socket = -1, client_socket = -1;
     struct addrinfo hints, *server_info, *p;
     struct sockaddr_storage client_address;
     socklen_t address_size;
     struct sigaction signal_action;
     int option = 1;
-    char client_ip[INET6_ADDRSTRLEN];
-    int rv;
+    char client_ip[INET6_ADDRSTRLEN] = "\0";
+    int rv = -1;
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;

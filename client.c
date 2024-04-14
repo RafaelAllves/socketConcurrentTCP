@@ -21,7 +21,7 @@ void *get_in_addr(struct sockaddr *sa) {
 }
 
 void send_to_server(int sockfd, const char *format, ...) {
-    char message[100];
+    char message[100] = "\0";
     va_list args;
 
     va_start(args, format);
@@ -35,12 +35,13 @@ void send_to_server(int sockfd, const char *format, ...) {
 }
 
 void receive_from_server(int sockfd) {
-    char buffer[2048]; // Buffer size
+    char buffer[2048] = "\0"; // Buffer size
     int total_bytes_received = 0;
-    int bytes_received;
+    int bytes_received = -1;
 
     while (1) {
-        bytes_received = recv(sockfd, buffer + total_bytes_received, sizeof(buffer) - total_bytes_received - 1, 0);
+        memset(buffer, 0, sizeof(buffer));
+        bytes_received = recv(sockfd, buffer, sizeof(buffer), 0);
 
         if (bytes_received <= 0) {
             if (bytes_received == 0) {
@@ -67,10 +68,10 @@ void receive_from_server(int sockfd) {
 
 
 int main(int argc, char *argv[]) {
-    int sockfd;
+    int sockfd = -1;
     struct addrinfo hints, *servinfo, *p;
-    int rv;
-    char s[INET6_ADDRSTRLEN];
+    int rv = -1;
+    char s[INET6_ADDRSTRLEN] = "\0";
     char *server_ip = "localhost";
 
     if (argc > 2 && strcmp(argv[1], "-i") == 0) {
@@ -121,7 +122,7 @@ int main(int argc, char *argv[]) {
     while(1) {
         receive_from_server(sockfd); // Wait for the message from the server
 
-        char message_to_server[100];
+        char message_to_server[100] = "\0";
         fgets(message_to_server, sizeof(message_to_server), stdin);
 
         send_to_server(sockfd, "%s", message_to_server);
