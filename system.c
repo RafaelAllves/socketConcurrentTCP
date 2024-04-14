@@ -5,7 +5,7 @@
 #include <string.h>
 
 const int DEBUG = 0;
-const char DB_NAME[] = "dev.db";
+const char DB_NAME[] = "dev.sqlite3";
 
 /* Data types */
 
@@ -28,7 +28,7 @@ struct Musics {
 /* Communication with client */
 
 void send_to_client(int connfd, const char *format, ...) {
-    char message[1024];
+    char message[2048];
     va_list args;
 
     va_start(args, format);
@@ -421,7 +421,7 @@ void list_all(int connfd) {
     struct Musics musics;
     db_fetch(connfd, &musics);
 
-    // send_to_client(connfd, "\nLista de todas as Musicas\n");
+    send_to_client(connfd, "\nLista de todas as Musicas\n");
 
     while (musics.musics != NULL) {
         show_music(connfd, musics.musics);

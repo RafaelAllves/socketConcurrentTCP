@@ -35,7 +35,7 @@ void send_to_server(int sockfd, const char *format, ...) {
 }
 
 void receive_from_server(int sockfd) {
-    char buffer[1024]; // Buffer size
+    char buffer[2048]; // Buffer size
     int total_bytes_received = 0;
     int bytes_received;
 
