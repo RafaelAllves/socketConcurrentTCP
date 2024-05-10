@@ -66,7 +66,7 @@ void send_to_client(struct Conn * conn, const char *format, ...) {       /* TODO
         printf("%s", message);
     
     // Comment for standalone
-    if (sendto(conn->connfd, message, strlen(message), 0, conn->client_address, conn->address_len) == -1) {
+    if (sendto(conn->connfd, message, strlen(message), 0, conn->client_address, *conn->address_len) == -1) {
         perror("send");
     }
     memset(message, 0, sizeof(message));
@@ -90,7 +90,7 @@ void listen_for_client(struct Conn * conn, const char *format, ...) {
             fgets(buffer, sizeof(buffer), stdin);
 
         if (vsscanf(buffer, format, args) < 1)
-            send_to_client_tcp(conn, "\nValor invalido! Tente novamente::\n");
+            send_to_client(conn, "\nValor invalido! Tente novamente::\n");
         else
             break;
     }
@@ -104,6 +104,7 @@ void db_sql_check(struct Conn * conn, int rc, sqlite3 *db) {
         if (rc = sqlite3_errcode(db) != SQLITE_OK) {
             const char *error_msg = sqlite3_errmsg(db);
             send_to_client(conn, "\nErro na interacao com o banco de dados (%d): %s\n\n", rc, error_msg);
+            printf("\nErro na interacao com o banco de dados (%d): %s\n\n", rc, error_msg);
             sqlite3_close(db);
             exit(1);
         }
@@ -127,7 +128,7 @@ int db_remove_by_id(struct Conn * conn, int id) {
     // Execute the DELETE statement
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
-        send_to_client_tcp(conn, "\nErro ao apagar musica: %s\n\n", sqlite3_errmsg(db));
+        send_to_client(conn, "\nErro ao apagar musica: %s\n\n", sqlite3_errmsg(db));
         success = 0;
     }
 
@@ -192,7 +193,7 @@ void db_fetch(struct Conn * conn, struct Musics *musics) {
         // Create a new Music structure for each row
         struct Music *music = (struct Music *)malloc(sizeof(struct Music));
         if (music == NULL) {
-            send_to_client_tcp(conn, "\nErro ao alocar memoria para nova musica!\n\n");
+            send_to_client(conn, "\nErro ao alocar memoria para nova musica!\n\n");
             sqlite3_finalize(stmt);
             sqlite3_close(db);
             exit(1);
@@ -216,6 +217,9 @@ void db_fetch(struct Conn * conn, struct Musics *musics) {
         rc = sqlite3_step(stmt);
     }
 
+    if (rc != SQLITE_DONE)
+        db_sql_check(conn, rc, db);
+
     sqlite3_finalize(stmt);
     sqlite3_close(db);
 }
@@ -234,7 +238,7 @@ void db_initialize(struct Conn * conn) {
 
 /* Utils */
 
-void screen_pause(struct Conn * conn) {
+void screen_pause_tcp(struct Conn * conn) {
     char input[256] = "\0";
     
     send_to_client_tcp(conn, "\nPressione 1 para retornar ao menu principal::\n");
@@ -242,6 +246,20 @@ void screen_pause(struct Conn * conn) {
     listen_for_client(conn, "%s", input);
     memset(input, 0, sizeof(input));
 
+}
+
+void screen_pause(struct Conn * conn) {
+    char input[256] = "\0";
+    
+    send_to_client(conn, "\nPressione 1 para retornar ao menu principal::\n");
+
+    listen_for_client(conn, "%s", input);
+    memset(input, 0, sizeof(input));
+
+}
+
+void show_music_preview_tcp(struct Conn * conn, struct Music *music) {
+    send_to_client_tcp(conn, "\nIdentificador Unico: %d\nTitulo: %s\nInterprete: %s\n", music->id, music->title, music->artist);
 }
 
 void show_music_preview(struct Conn * conn, struct Music *music) {
@@ -371,15 +389,21 @@ void list_by_year_and_language_tcp(struct Conn * conn) {
     struct Musics musics;
     db_fetch(conn, &musics);
 
+    send_to_client(conn, "tcp_mode");
+
     send_to_client_tcp(conn, "\nInsira o ano de lancamento da musica::\n");
     listen_for_client(conn, " %d", &yearList);
+
+    send_to_client(conn, "tcp_mode");
     send_to_client_tcp(conn, "\nInsira o idioma da musica::\n");
     listen_for_client(conn, " %[^\n]", languageList);
+
+    send_to_client(conn, "tcp_mode");
 
     while(musics.musics != NULL) {
         if (musics.musics->year == yearList && strcmp(musics.musics->language, languageList) == 0){
             found = 1;
-            show_music_preview(conn, musics.musics);
+            show_music_preview_tcp(conn, musics.musics);
         }
 
         musics.musics = musics.musics->next;
@@ -388,7 +412,7 @@ void list_by_year_and_language_tcp(struct Conn * conn) {
     if (!found)
         send_to_client_tcp(conn, "\nNao foram encontradas musicas com esses criterios!\n\n");
 
-    screen_pause(conn);
+    screen_pause_tcp(conn);
 };
 
 void list_by_type_tcp(struct Conn * conn) {
@@ -397,13 +421,17 @@ void list_by_type_tcp(struct Conn * conn) {
     struct Musics musics;
     db_fetch(conn, &musics);
 
+    send_to_client(conn, "tcp_mode");
+
     send_to_client_tcp(conn, "\nInsira o genero musical::\n");
     listen_for_client(conn, " %[^\n]", typeList);
+
+    send_to_client(conn, "tcp_mode");
 
     while(musics.musics != NULL) {
         if (strcmp(musics.musics->type, typeList) == 0){
             found = 1;
-            show_music_preview(conn, musics.musics);
+            show_music_preview_tcp(conn, musics.musics);
         }
 
         musics.musics = musics.musics->next;
@@ -412,7 +440,7 @@ void list_by_type_tcp(struct Conn * conn) {
     if (!found)
         send_to_client_tcp(conn, "\nNao foram encontradas musicas com esse genero musical!\n\n");
 
-    screen_pause(conn);
+    screen_pause_tcp(conn);
 };
 
 void search_by_id_udp(struct Conn * conn) {
@@ -496,7 +524,7 @@ int serve_client(struct sockaddr * client_address, socklen_t * address_len, int 
     int action = 0;
 
     while (1) {
-        send_to_client_tcp(&conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
+        send_to_client(&conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
                         "1. Listar musicas por ano\n"
                         "2. Listar musicas por ano e idioma TCP\n"
                         "3. Listar musicas por genero TCP\n"
@@ -548,7 +576,7 @@ int serve_client_admin(struct sockaddr * client_address, socklen_t * address_len
     int action = 0;
 
     while (1) {
-        send_to_client_tcp(&conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
+        send_to_client(&conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
                         "1. Adicionar uma musica\n"
                         "2. Remover uma musica\n"
                         "3. Listar musicas por ano\n"

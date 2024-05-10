@@ -61,7 +61,7 @@ void recv_udp(int sockfd, char *buffer, int *total_bytes_received, struct sockad
     int bytes_received = -1;
     int flag = 0;
 
-    bytes_received = recvfrom(sockfd, buffer, sizeof(buffer), 0, &client_address, &address_len);
+    bytes_received = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_address, address_len);
 
     if (bytes_received <= 0) {
         if (bytes_received == 0) {
@@ -84,46 +84,31 @@ void receive_from_server(int sockfd) {
     socklen_t address_len;
 
     while (1) {
-        recv_tcp(sockfd, buffer, &total_bytes_received);
+        recv_udp(sockfd, buffer, &total_bytes_received, &client_address, &address_len);
 
-        if (strcmp(buffer, "udp_show") == 0) {
+        if (strcmp(buffer, "tcp_mode") == 0) {
             while(1) {
-                recv_udp(sockfd, buffer, &total_bytes_received, &client_address, &address_len);
+                recv_tcp(sockfd, buffer, &total_bytes_received);
 
-                if (strcmp(buffer, "tcp_mode") == 0)
+                if (strcmp(buffer, "udp_mode") == 0) {
                     break;
+                }
 
                 printf("%s", buffer);
 
-                if (strstr(buffer, "::\n") != NULL)
+                if (strstr(buffer, "::\n") != NULL) {
                     return;
+                }
 
             }
             continue;        
         }
 
-        if (strcmp(buffer, "udp_download") == 0) {
-            while(1) {
-                recv_udp(sockfd, buffer, &total_bytes_received, &client_address, &address_len);
+        printf("%s", buffer);
 
-                if (strcmp(buffer, "tcp_mode") == 0)
-                    break;
-
-                printf("Starting download...\n");
-                // TODO file download logic
-
-                if (strstr(buffer, "::\n") != NULL)
-                    return;
-
-            }
-            continue;        
-        }
-
-        if (strcmp(buffer, "tcp_mode") != 0)
-            printf("%s", buffer);
-
-        if (strstr(buffer, "::\n") != NULL)
+        if (strstr(buffer, "::\n") != NULL) {
             return;
+        }
     }
 }
 
