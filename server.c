@@ -108,9 +108,9 @@ int main(void)
             recv(client_socket, &admin_flag, 1, 0); // Receives the client's flag
 
             if (admin_flag == '1') {
-                serve_client_admin(client_ip, client_socket);
+                serve_client_admin(&client_address, &address_size, client_socket);
             } else {
-                serve_client(client_ip, client_socket); 
+                serve_client(&client_address, &address_size, client_socket); 
             }
 
             close(client_socket);

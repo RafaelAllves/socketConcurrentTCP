@@ -34,36 +34,97 @@ void send_to_server(int sockfd, const char *format, ...) {
     memset(message, 0, sizeof(message));
 }
 
+void recv_tcp(int sockfd, char *buffer, int *total_bytes_received) {
+    int buffer_size = sizeof(buffer);
+    memset(buffer, 0, buffer_size);
+    int bytes_received = -1;
+    int flag = 0;
+
+    bytes_received = recv(sockfd, buffer, buffer_size, flag);
+
+    if (bytes_received <= 0) {
+        if (bytes_received == 0) {
+            printf("Conexão encerrada pelo servidor.\n");
+            exit(0);
+        } else {
+            perror("recv");
+        }
+        return;
+    }
+    *total_bytes_received += bytes_received;
+    buffer[*total_bytes_received] = '\0';
+}
+
+void recv_udp(int sockfd, char *buffer, int *total_bytes_received, struct sockaddr *client_address, socklen_t *address_len) {
+    int buffer_size = sizeof(buffer);
+    memset(buffer, 0, buffer_size);
+    int bytes_received = -1;
+    int flag = 0;
+
+    bytes_received = recvfrom(sockfd, buffer, sizeof(buffer), 0, &client_address, &address_len);
+
+    if (bytes_received <= 0) {
+        if (bytes_received == 0) {
+            printf("Conexão encerrada pelo servidor.\n");
+            exit(0);
+        } else {
+            perror("recv");
+        }
+        return;
+    }
+    *total_bytes_received += bytes_received;
+    buffer[*total_bytes_received] = '\0';
+}
+
 void receive_from_server(int sockfd) {
     char buffer[2048] = "\0"; // Buffer size
     int total_bytes_received = 0;
     int bytes_received = -1;
+    struct sockaddr client_address;
+    socklen_t address_len;
 
     while (1) {
-        memset(buffer, 0, sizeof(buffer));        
-        bytes_received = recv(sockfd, buffer, sizeof(buffer), 0);
+        recv_tcp(sockfd, buffer, &total_bytes_received);
 
-        if (bytes_received <= 0) {
-            if (bytes_received == 0) {
-                printf("Conexão encerrada pelo servidor.\n");
-                exit(0);
-            } else {
-                perror("recv");
+        if (strcmp(buffer, "udp_show") == 0) {
+            while(1) {
+                recv_udp(sockfd, buffer, &total_bytes_received, &client_address, &address_len);
+
+                if (strcmp(buffer, "tcp_mode") == 0)
+                    break;
+
+                printf("%s", buffer);
+
+                if (strstr(buffer, "::\n") != NULL)
+                    return;
+
             }
+            continue;        
+        }
+
+        if (strcmp(buffer, "udp_download") == 0) {
+            while(1) {
+                recv_udp(sockfd, buffer, &total_bytes_received, &client_address, &address_len);
+
+                if (strcmp(buffer, "tcp_mode") == 0)
+                    break;
+
+                printf("Starting download...\n");
+                // TODO file download logic
+
+                if (strstr(buffer, "::\n") != NULL)
+                    return;
+
+            }
+            continue;        
+        }
+
+        if (strcmp(buffer, "tcp_mode") != 0)
+            printf("%s", buffer);
+
+        if (strstr(buffer, "::\n") != NULL)
             return;
-        }
-        total_bytes_received += bytes_received;
-        buffer[total_bytes_received] = '\0';
-        printf("%s", buffer);
-
-        if (strstr(buffer, "::\n") != NULL) {
-            // Stops reading messages from the server when it encounters '::\n'
-            memset(buffer, 0, sizeof(buffer));
-            break;
-        }
     }
-    memset(buffer, 0, sizeof(buffer));
-
 }
 
 
@@ -124,7 +185,7 @@ int main(int argc, char *argv[]) {
 
         char message_to_server[100] = "\0";
         fgets(message_to_server, sizeof(message_to_server), stdin);
-
+        
         send_to_server(sockfd, "%s", message_to_server);
         memset(message_to_server, 0, sizeof(message_to_server));
 
