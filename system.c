@@ -6,8 +6,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#define BUFFER_SIZE 2048
-
+const int buffer_size = 2048;
 const char DB_NAME[] = "dev.sqlite3";
 
 /* Data types */
@@ -38,7 +37,7 @@ struct Conn {
 
 void send_to_client(struct Conn * conn, const char *format, ...) {
     va_list args;
-    char message[BUFFER_SIZE];
+    char message[buffer_size];
     memset(message, '\0', sizeof(message));
 
     va_start(args, format);
@@ -51,7 +50,8 @@ void send_to_client(struct Conn * conn, const char *format, ...) {
 }
 
 void listen_for_client(struct Conn * conn, const char *format, ...) {
-    char buffer[BUFFER_SIZE] = "\0";
+    char buffer[buffer_size];
+    memset(buffer, '\0', sizeof(buffer));
 
     va_list args;
     va_start(args, format);
@@ -68,7 +68,6 @@ void listen_for_client(struct Conn * conn, const char *format, ...) {
         else
             break;
     }
-    memset(buffer, 0, sizeof(buffer));
 }
 
 /* Interation with database */
@@ -213,7 +212,7 @@ void db_initialize(struct Conn * conn) {
 /* Utils */
 
 void screen_pause(struct Conn * conn) {
-    char input[BUFFER_SIZE];
+    char input[buffer_size];
     memset(input, '\0', sizeof(input));
     
     send_to_client(conn, "\nPressione ENTER para retornar ao menu principal: \ufeff");
@@ -343,66 +342,60 @@ void list_by_year(struct Conn * conn) {
 };
 
 void list_by_year_and_language_tcp(struct Conn * conn) {
-    int found = 0;
-    int yearList = -1;
+    int found = 0, yearList = -1;
+    
     char languageList[50];
     memset(languageList, '\0', sizeof(languageList));
+
     struct Musics musics;
     db_fetch(conn, &musics);
 
-    send_to_client(conn, "tcp_mode");
+    send_to_client(conn, "\nInsira o ano de lancamento da musica: \ufeff");
+    listen_for_client(conn, " %d", &yearList);
 
-    send_to_client_tcp(conn, "\nInsira o ano de lancamento da musica: \ufeff");
-    listen_for_client_tcp(conn, " %d", &yearList);
-
-    send_to_client(conn, "tcp_mode");
-    send_to_client_tcp(conn, "\nInsira o idioma da musica: \ufeff");
-    listen_for_client_tcp(conn, " %[^\n]", languageList);
-
-    send_to_client(conn, "tcp_mode");
+    send_to_client(conn, "\nInsira o idioma da musica: \ufeff");
+    listen_for_client(conn, " %[^\n]", languageList);
 
     while(musics.musics != NULL) {
         if (musics.musics->year == yearList && strcmp(musics.musics->language, languageList) == 0){
             found = 1;
-            show_music_preview_tcp(conn, musics.musics);
+            show_music_preview(conn, musics.musics);
         }
 
         musics.musics = musics.musics->next;
     }
 
     if (!found)
-        send_to_client_tcp(conn, "\nNao foram encontradas musicas com esses criterios!\n\n");
+        send_to_client(conn, "\nNao foram encontradas musicas com esses criterios!\n\n");
 
-    screen_pause_tcp(conn);
+    screen_pause(conn);
 };
 
 void list_by_type_tcp(struct Conn * conn) {
     int found = 0;
+    
     char typeList[50];
     memset(typeList, '\0', sizeof(typeList));
+
     struct Musics musics;
     db_fetch(conn, &musics);
 
-    send_to_client(conn, "tcp_mode");
-
-    send_to_client_tcp(conn, "\nInsira o genero musical: \ufeff");
-    listen_for_client_tcp(conn, " %[^\n]", typeList);
-
-    send_to_client(conn, "tcp_mode");
+    send_to_client(conn, "\nInsira o genero musical: \ufeff");
+    listen_for_client(conn, " %[^\n]", typeList);
 
     while(musics.musics != NULL) {
         if (strcmp(musics.musics->type, typeList) == 0){
             found = 1;
-            show_music_preview_tcp(conn, musics.musics);
+            show_music_preview(conn, musics.musics);
         }
 
         musics.musics = musics.musics->next;
     }
 
     if (!found)
-        send_to_client_tcp(conn, "\nNao foram encontradas musicas com esse genero musical!\n\n");
+        send_to_client(conn, "\nNao foram encontradas musicas com esse genero musical!\n\n");
 
-    screen_pause_tcp(conn);
+    screen_pause(conn);
 };
 
 void search_by_id(struct Conn * conn) {
@@ -491,7 +484,7 @@ void show_menu(struct Conn * conn, int admin_mode) {
             "Escolha uma ação (numero): \ufeff"
         );
     } else {
-        send_to_client(&conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
+        send_to_client(conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
             "1. Listar musicas por ano\n"
             "2. Listar musicas por ano e idioma TCP\n"
             "3. Listar musicas por genero TCP\n"
@@ -507,32 +500,32 @@ void show_menu(struct Conn * conn, int admin_mode) {
 int call_menu_input_adm(struct Conn * conn) {
     int action = 0;
 
-    listen_for_client(&conn, " %d", &action);
+    listen_for_client(conn, " %d", &action);
 
     switch (action) {
         case 1:
-            add_song(&conn);
+            add_song(conn);
             break;
         case 2:
-            remove_song(&conn);
+            remove_song(conn);
             break;
         case 3:
-            list_by_year(&conn);
+            list_by_year(conn);
             break;
         case 4:
-            list_by_year_and_language_tcp(&conn);
+            list_by_year_and_language_tcp(conn);
             break;
         case 5:
-            list_by_type_tcp(&conn);
+            list_by_type_tcp(conn);
             break;
         case 6:
-            search_by_id(&conn);
+            search_by_id(conn);
             break;
         case 7:
-            list_all(&conn);
+            list_all(conn);
             break;
         case 8:
-            send_file(&conn);
+            send_file(conn);
             break;
         case 9:
             return 1;
@@ -544,26 +537,26 @@ int call_menu_input_adm(struct Conn * conn) {
 int call_menu_input(struct Conn * conn) {
     int action = 0;
 
-    listen_for_client(&conn, " %d", &action);
+    listen_for_client(conn, " %d", &action);
 
     switch (action) {
         case 1:
-            list_by_year(&conn);
+            list_by_year(conn);
             break;
         case 2:
-            list_by_year_and_language_tcp(&conn);
+            list_by_year_and_language_tcp(conn);
             break;
         case 3:
-            list_by_type_tcp(&conn);
+            list_by_type_tcp(conn);
             break;
         case 4:
-            search_by_id(&conn);
+            search_by_id(conn);
             break;
         case 5:
-            list_all(&conn);
+            list_all(conn);
             break;
         case 6:
-            send_file(&conn);
+            send_file(conn);
             break;
         case 7:
             return 1;

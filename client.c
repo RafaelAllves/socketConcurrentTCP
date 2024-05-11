@@ -11,8 +11,9 @@
 #include <stdarg.h>
 
 #define PORT "3490"     // Port for connecting to the server
-#define ADMIN_FLAG 1        // 1 for admin, 0 for normal user
-#define BUFFER_SIZE 2048
+
+const int admin_flag = 1;       // 1 for admin, 0 for normal user
+const int buffer_size = 2048;
 
 struct addrinfo *client_info;
 
@@ -24,7 +25,7 @@ void *get_in_addr(struct sockaddr *sa) {
 }
 
 void send_to_server(int client_socket, const char *format, ...) {
-    char message[BUFFER_SIZE];
+    char message[buffer_size];
     memset(message, '\0', sizeof(message));
     va_list args;
 
@@ -57,7 +58,7 @@ void recv_msg(int client_socket, char *buffer, int *total_bytes_received) {
 
 void receive_from_server(int client_socket) {
     int total_bytes_received = 0;
-    char buffer[BUFFER_SIZE];
+    char buffer[buffer_size];
 
     while (1) {
         recv_msg(client_socket, buffer, &total_bytes_received);
@@ -83,7 +84,7 @@ void initialize_client(int sock_type) {
 
     if ((gai_rv = getaddrinfo(NULL, PORT, &addr_init, &client_info)) != 0) {
         fprintf(stderr, "getaddrinfo client error: %s\n", gai_strerror(gai_rv));
-        return 1;
+        return;
     }
     
     // Show client IP
@@ -121,7 +122,7 @@ int connect_to_server(char * server_addr, int sock_type, int opt_name) {
             continue;
         }
 
-        if (send(server_socket, ADMIN_FLAG, sizeof ADMIN_FLAG, 0) == -1) {
+        if (send(server_socket, &admin_flag, sizeof admin_flag, 0) == -1) {
             perror("error setting user type");
         }
         break;
@@ -158,7 +159,7 @@ int main(int argc, char *argv[]) {
     while(1) {
         receive_from_server(server_socket);     // Wait for message from the server
 
-        char message_to_server[BUFFER_SIZE];
+        char message_to_server[buffer_size];
         memset(message_to_server, '\0', sizeof(message_to_server));
 
         fgets(message_to_server, sizeof(message_to_server), stdin);
