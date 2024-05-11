@@ -253,6 +253,8 @@ void receive_file(int connfd, char *filename) {
         printf("\n Erro de leitura \n");
     }
     fclose(fp);
+    memset(buffer, 0, sizeof(buffer));
+    return;
 }
 
 void add_song(int connfd) {
@@ -291,8 +293,8 @@ void add_song(int connfd) {
 
 
         char filepath[1024];
-        printf("musicFile: %s\n", music->title);
-        sprintf(filepath, "musicas/%s.mp3", music->title); // Fixme: O codigo so aceita arquivos .mp3
+        printf("musicFile: %d\n", music->id);
+        sprintf(filepath, "musicas/%d.mp3", music->id); // Fixme: O codigo so aceita arquivos .mp3
         printf("filepath: %s\n", filepath);
         receive_file(connfd, filepath);
 
