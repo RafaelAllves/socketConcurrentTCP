@@ -6,7 +6,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-const int DEBUG = 0;
+#define BUFFER_SIZE 2048
+
 const char DB_NAME[] = "dev.sqlite3";
 
 /* Data types */
@@ -35,46 +36,22 @@ struct Conn {
 
 /* Communication with client */
 
-void send_to_client_tcp(struct Conn * conn, const char *format, ...) {
-    char message[2048] = "\0";
+void send_to_client(struct Conn * conn, const char *format, ...) {
     va_list args;
+    char message[BUFFER_SIZE];
+    memset(message, '\0', sizeof(message));
 
     va_start(args, format);
     vsnprintf(message, sizeof(message), format, args);
     va_end(args);
-
-    if (DEBUG)
-        printf("%s", message);
     
-    // Comment for standalone
     if (send(conn->connfd, message, strlen(message), 0) == -1) {
-        perror("send");
+        perror("send error");
     }
-    memset(message, 0, sizeof(message));
-    // Comment for standalone - END
-}
-
-void send_to_client(struct Conn * conn, const char *format, ...) {       /* TODO: UDP */
-    char message[2048] = "\0";
-    va_list args;
-
-    va_start(args, format);
-    vsnprintf(message, sizeof(message), format, args);
-    va_end(args);
-
-    if (DEBUG)
-        printf("%s", message);
-    
-    // Comment for standalone
-    if (sendto(conn->connfd, message, strlen(message), 0, conn->client_address, *conn->address_len) == -1) {
-        perror("send");
-    }
-    memset(message, 0, sizeof(message));
-    // Comment for standalone - END
 }
 
 void listen_for_client(struct Conn * conn, const char *format, ...) {
-    char buffer[256] = "\0";
+    char buffer[BUFFER_SIZE] = "\0";
 
     va_list args;
     va_start(args, format);
@@ -82,15 +59,12 @@ void listen_for_client(struct Conn * conn, const char *format, ...) {
     while(1) {
         fflush(stdin);
 
-        // Comment for standalone
-        recv(conn->connfd, buffer, sizeof(buffer), 0);
-        // Comment for standalone - END
-
-        if (DEBUG)
-            fgets(buffer, sizeof(buffer), stdin);
+        if (recv(conn->connfd, buffer, sizeof(buffer), 0) == -1) {
+            perror("msg recv error");
+        }
 
         if (vsscanf(buffer, format, args) < 1)
-            send_to_client(conn, "\nValor invalido! Tente novamente::\n");
+            send_to_client(conn, "\nValor invalido! Tente novamente.\n\ufeff");
         else
             break;
     }
@@ -238,28 +212,14 @@ void db_initialize(struct Conn * conn) {
 
 /* Utils */
 
-void screen_pause_tcp(struct Conn * conn) {
-    char input[256] = "\0";
-    
-    send_to_client_tcp(conn, "\nPressione 1 para retornar ao menu principal::\n");
-
-    listen_for_client(conn, "%s", input);
-    memset(input, 0, sizeof(input));
-
-}
-
 void screen_pause(struct Conn * conn) {
-    char input[256] = "\0";
+    char input[BUFFER_SIZE];
+    memset(input, '\0', sizeof(input));
     
-    send_to_client(conn, "\nPressione 1 para retornar ao menu principal::\n");
+    send_to_client(conn, "\nPressione ENTER para retornar ao menu principal: \ufeff");
 
     listen_for_client(conn, "%s", input);
-    memset(input, 0, sizeof(input));
 
-}
-
-void show_music_preview_tcp(struct Conn * conn, struct Music *music) {
-    send_to_client_tcp(conn, "\nIdentificador Unico: %d\nTitulo: %s\nInterprete: %s\n", music->id, music->title, music->artist);
 }
 
 void show_music_preview(struct Conn * conn, struct Music *music) {
@@ -275,7 +235,7 @@ void show_music(struct Conn * conn, struct Music *music) {
 
 /* Specified Functions */
 
-void add_song_udp(struct Conn * conn) {
+void add_song(struct Conn * conn) {
     char answer = '\0';
     struct Musics musics;
     musics.musics = NULL;
@@ -294,38 +254,38 @@ void add_song_udp(struct Conn * conn) {
 
         send_to_client(conn, "\nPreencha os seguintes campos para adicionar uma musica.\n");
 
-        send_to_client(conn, "Titulo::\n");
+        send_to_client(conn, "Titulo: \ufeff");
         listen_for_client(conn, " %[^\n]", music->title);
 
-        send_to_client(conn, "Interprete::\n");
+        send_to_client(conn, "Interprete: \ufeff");
         listen_for_client(conn, " %[^\n]", music->artist);
 
-        send_to_client(conn, "Idioma::\n");
+        send_to_client(conn, "Idioma: \ufeff");
         listen_for_client(conn, " %[^\n]", music->language);
 
-        send_to_client(conn, "Genero musical::\n");
+        send_to_client(conn, "Genero musical: \ufeff");
         listen_for_client(conn, " %[^\n]", music->type);
 
         while (answer != 's' && answer != 'n') {
-            send_to_client(conn, "Possui refrão? (s/n)::\n");
+            send_to_client(conn, "Possui refrão? (s/n): \ufeff");
             listen_for_client(conn, " %c", &answer);
 
             if (answer == 's') {
-                send_to_client(conn, "Insira o Refrão::\n");
+                send_to_client(conn, "Insira o Refrão: \ufeff");
                 listen_for_client(conn, " %[^\n]", music->chore);
             } else {
                 strcpy(music->chore, "Não possui");
             }
         }        
 
-        send_to_client(conn, "Ano de lancamento::\n");
+        send_to_client(conn, "Ano de lancamento: \ufeff");
         listen_for_client(conn, " %d", &music->year);
 
         music->next = musics.musics;
 
         musics.musics = music;
 
-        send_to_client(conn, "\nMusica adicionada com sucesso! Deseja adicionar mais musicas? (s/n)::\n");
+        send_to_client(conn, "\nMusica adicionada com sucesso! Deseja adicionar mais musicas? (s/n): \ufeff");
         listen_for_client(conn, " %c", &answer);
 
         if (answer == 'n')
@@ -335,13 +295,13 @@ void add_song_udp(struct Conn * conn) {
     db_pull(conn, &musics);
 };
 
-void remove_song_udp(struct Conn * conn) {
+void remove_song(struct Conn * conn) {
     char answer = '\0';
     int removeId = -1;
     struct Musics musics;
     db_fetch(conn, &musics);
 
-    send_to_client(conn, "\nInsira o ID da musica a ser removida::\n");
+    send_to_client(conn, "\nInsira o ID da musica a ser removida: \ufeff");
     listen_for_client(conn, " %d", &removeId);
     
     while(musics.musics != NULL && musics.musics->id != removeId)
@@ -356,14 +316,14 @@ void remove_song_udp(struct Conn * conn) {
         send_to_client(conn, "\nMusica removida com sucesso!\n\n");
 };
 
-void list_by_year_udp(struct Conn * conn) {
+void list_by_year(struct Conn * conn) {
     int found = 0;
     int yearList = -1;
 
     struct Musics musics;
     db_fetch(conn, &musics);
 
-    send_to_client(conn, "\nInsira o ano de lancamento da musica::\n");
+    send_to_client(conn, "\nInsira o ano de lancamento da musica: \ufeff");
     listen_for_client(conn, " %d", &yearList);
 
     while(musics.musics != NULL) {
@@ -385,18 +345,19 @@ void list_by_year_udp(struct Conn * conn) {
 void list_by_year_and_language_tcp(struct Conn * conn) {
     int found = 0;
     int yearList = -1;
-    char languageList[50] = "\0";
+    char languageList[50];
+    memset(languageList, '\0', sizeof(languageList));
     struct Musics musics;
     db_fetch(conn, &musics);
 
     send_to_client(conn, "tcp_mode");
 
-    send_to_client_tcp(conn, "\nInsira o ano de lancamento da musica::\n");
-    listen_for_client(conn, " %d", &yearList);
+    send_to_client_tcp(conn, "\nInsira o ano de lancamento da musica: \ufeff");
+    listen_for_client_tcp(conn, " %d", &yearList);
 
     send_to_client(conn, "tcp_mode");
-    send_to_client_tcp(conn, "\nInsira o idioma da musica::\n");
-    listen_for_client(conn, " %[^\n]", languageList);
+    send_to_client_tcp(conn, "\nInsira o idioma da musica: \ufeff");
+    listen_for_client_tcp(conn, " %[^\n]", languageList);
 
     send_to_client(conn, "tcp_mode");
 
@@ -417,14 +378,15 @@ void list_by_year_and_language_tcp(struct Conn * conn) {
 
 void list_by_type_tcp(struct Conn * conn) {
     int found = 0;
-    char typeList[50] = "\0";
+    char typeList[50];
+    memset(typeList, '\0', sizeof(typeList));
     struct Musics musics;
     db_fetch(conn, &musics);
 
     send_to_client(conn, "tcp_mode");
 
-    send_to_client_tcp(conn, "\nInsira o genero musical::\n");
-    listen_for_client(conn, " %[^\n]", typeList);
+    send_to_client_tcp(conn, "\nInsira o genero musical: \ufeff");
+    listen_for_client_tcp(conn, " %[^\n]", typeList);
 
     send_to_client(conn, "tcp_mode");
 
@@ -443,13 +405,13 @@ void list_by_type_tcp(struct Conn * conn) {
     screen_pause_tcp(conn);
 };
 
-void search_by_id_udp(struct Conn * conn) {
+void search_by_id(struct Conn * conn) {
     int searchId = -1;
     struct Musics musics;
     db_fetch(conn, &musics);
 
     while (1) {
-        send_to_client(conn, "\nInsira o ID da musica::\n");
+        send_to_client(conn, "\nInsira o ID da musica: \ufeff");
         listen_for_client(conn, " %d", &searchId);
 
         if (searchId >= 0 && searchId <= musics.n)
@@ -470,7 +432,7 @@ void search_by_id_udp(struct Conn * conn) {
     screen_pause(conn);
 };
 
-void list_all_udp(struct Conn * conn) {
+void list_all(struct Conn * conn) {
     struct Musics musics;
     db_fetch(conn, &musics);
 
@@ -484,13 +446,13 @@ void list_all_udp(struct Conn * conn) {
     screen_pause(conn);
 }
 
-void download_song_udp(struct Conn * conn) {
+void send_file(struct Conn * conn) {
     int searchId = -1;
     struct Musics musics;
     db_fetch(conn, &musics);
 
     while (1) {
-        send_to_client(conn, "\nInsira o ID da musica a ser baixada::\n");
+        send_to_client(conn, "\nInsira o ID da musica a ser baixada: \ufeff");
         listen_for_client(conn, " %d", &searchId);
 
         if (searchId >= 0 && searchId <= musics.n)
@@ -514,113 +476,117 @@ void download_song_udp(struct Conn * conn) {
 }
 /* Server Initialization */
 
-int serve_client(struct sockaddr * client_address, socklen_t * address_len, int connfd) {
-    struct Conn conn;
-    conn.client_address = client_address;
-    conn.address_len = address_len;
-    conn.connfd = connfd;
+void show_menu(struct Conn * conn, int admin_mode) {
+    if (admin_mode) {
+        send_to_client(conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
+            "1. Adicionar uma musica\n"
+            "2. Remover uma musica\n"
+            "3. Listar musicas por ano\n"
+            "4. Listar musicas por ano e idioma TCP\n"
+            "5. Listar musicas por genero TCP\n"
+            "6. Consultar musica por ID\n"
+            "7. Listar todas as musicas\n"
+            "8. Baixar musica\n"
+            "9. Encerrar\n\n"
+            "Escolha uma ação (numero): \ufeff"
+        );
+    } else {
+        send_to_client(&conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
+            "1. Listar musicas por ano\n"
+            "2. Listar musicas por ano e idioma TCP\n"
+            "3. Listar musicas por genero TCP\n"
+            "4. Consultar musica por ID\n"
+            "5. Listar todas as musicas\n"
+            "6. Baixar musica\n"
+            "7. Encerrar\n\n"
+            "Escolha uma ação (numero): \ufeff"
+        );
+    }
+}
 
-    db_initialize(&conn);
+int call_menu_input_adm(struct Conn * conn) {
     int action = 0;
 
-    while (1) {
-        send_to_client(&conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
-                        "1. Listar musicas por ano\n"
-                        "2. Listar musicas por ano e idioma TCP\n"
-                        "3. Listar musicas por genero TCP\n"
-                        "4. Consultar musica por ID\n"
-                        "5. Listar todas as musicas\n"
-                        "6. Baixar musica\n"
-                        "7. Encerrar\n\n"
-                        "Escolha uma ação (numero)::\n");
+    listen_for_client(&conn, " %d", &action);
 
-        
-        listen_for_client(&conn, " %d", &action);
-
-        switch (action) {
-            case 1:
-                list_by_year_udp(&conn);
-                break;
-            case 2:
-                list_by_year_and_language_tcp(&conn);
-                break;
-            case 3:
-                list_by_type_tcp(&conn);
-                break;
-            case 4:
-                search_by_id_udp(&conn);
-                break;
-            case 5:
-                list_all_udp(&conn);
-                break;
-            case 6:
-                download_song_udp(&conn);
-                break;
-            case 7:
-                exit(0);
-        }
-        memset(&action, 0, sizeof(action));
+    switch (action) {
+        case 1:
+            add_song(&conn);
+            break;
+        case 2:
+            remove_song(&conn);
+            break;
+        case 3:
+            list_by_year(&conn);
+            break;
+        case 4:
+            list_by_year_and_language_tcp(&conn);
+            break;
+        case 5:
+            list_by_type_tcp(&conn);
+            break;
+        case 6:
+            search_by_id(&conn);
+            break;
+        case 7:
+            list_all(&conn);
+            break;
+        case 8:
+            send_file(&conn);
+            break;
+        case 9:
+            return 1;
     }
 
     return 0;
 }
 
+int call_menu_input(struct Conn * conn) {
+    int action = 0;
 
-int serve_client_admin(struct sockaddr * client_address, socklen_t * address_len, int connfd) {
+    listen_for_client(&conn, " %d", &action);
+
+    switch (action) {
+        case 1:
+            list_by_year(&conn);
+            break;
+        case 2:
+            list_by_year_and_language_tcp(&conn);
+            break;
+        case 3:
+            list_by_type_tcp(&conn);
+            break;
+        case 4:
+            search_by_id(&conn);
+            break;
+        case 5:
+            list_all(&conn);
+            break;
+        case 6:
+            send_file(&conn);
+            break;
+        case 7:
+            return 1;
+    }
+
+    return 0;
+}
+
+void serve_client(int admin_mode, struct sockaddr * client_address, socklen_t * address_len, int connfd) {
     struct Conn conn;
     conn.client_address = client_address;
     conn.address_len = address_len;
     conn.connfd = connfd;
+    int exit = 0;
 
     db_initialize(&conn);
-    int action = 0;
 
-    while (1) {
-        send_to_client(&conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
-                        "1. Adicionar uma musica\n"
-                        "2. Remover uma musica\n"
-                        "3. Listar musicas por ano\n"
-                        "4. Listar musicas por ano e idioma TCP\n"
-                        "5. Listar musicas por genero TCP\n"
-                        "6. Consultar musica por ID\n"
-                        "7. Listar todas as musicas\n"
-                        "8. Baixar musica\n"
-                        "9. Encerrar\n\n"
-                        "Escolha uma ação (numero)::\n");
+    while (!exit) {
+        show_menu(&conn, admin_mode);
 
-        
-        listen_for_client(&conn, " %d", &action);
-
-        switch (action) {
-            case 1:
-                add_song_udp(&conn);
-                break;
-            case 2:
-                remove_song_udp(&conn);
-                break;
-            case 3:
-                list_by_year_udp(&conn);
-                break;
-            case 4:
-                list_by_year_and_language_tcp(&conn);
-                break;
-            case 5:
-                list_by_type_tcp(&conn);
-                break;
-            case 6:
-                search_by_id_udp(&conn);
-                break;
-            case 7:
-                list_all_udp(&conn);
-                break;
-            case 8:
-                download_song_udp(&conn);
-                break;
-            case 9:
-                exit(0);
-        }
-        memset(&action, 0, sizeof(action));
+        if (admin_mode)
+            exit = call_menu_input_adm(&conn);
+        else
+            exit = call_menu_input(&conn);
     }
-
-    return 0;
 }

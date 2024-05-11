@@ -55,3 +55,8 @@ dkms.conf
 .vscode
 executables
 dev
+executables
+
+# Files
+musicas/*
+*.sqlite3
