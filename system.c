@@ -245,8 +245,12 @@ void receive_file(int connfd, char *filename) {
         return;
     }
     while((bytesReceived = read(connfd, buffer, 1024)) > 0){
-        // printf("Bytes recebidos %d\n",bytesReceived);    
+        printf("Bytes recebidos %d\n",bytesReceived);    
         fwrite(buffer, 1,bytesReceived,fp);
+        if (bytesReceived < 1024) {
+            break;
+        }
+        
     }
 
     if(bytesReceived < 0){
@@ -289,7 +293,7 @@ void add_song(int connfd) {
         listen_for_client(connfd, " %[^\n]", music->type);
 
         send_to_client(connfd, "Nome do arquivo da musica:::\n");
-        listen_for_client(connfd, " %[^\n]", music->file);
+        // listen_for_client(connfd, " %[^\n]", music->file);
 
 
         char filepath[1024];
