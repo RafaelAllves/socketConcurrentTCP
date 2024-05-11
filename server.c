@@ -41,21 +41,21 @@ void *get_socket_address(struct sockaddr *sa) {
 
 int bind_socket(int sock_type, int opt_name, int *option) {
     int server_socket = -1, gai_rv = -1;
-    struct addrinfo addr_info, *server_info, *p;
-    memset(&addr_info, 0, sizeof addr_info);
+    struct addrinfo addr_init, *server_info, *curr_server_info;
+    memset(&addr_init, 0, sizeof addr_init);
 
-    addr_info.ai_family = AF_UNSPEC;        // use IPv4 or IPv6, whichever
-    addr_info.ai_socktype = sock_type;      
-    addr_info.ai_flags = AI_PASSIVE;        // fill in my IP for me
+    addr_init.ai_family = AF_UNSPEC;        // use IPv4 or IPv6, whichever
+    addr_init.ai_socktype = sock_type;      
+    addr_init.ai_flags = AI_PASSIVE;        // fill in host IP
 
-    if ((gai_rv = getaddrinfo(NULL, PORT, &addr_info, &server_info)) != 0) {
+    if ((gai_rv = getaddrinfo(NULL, PORT, &addr_init, &server_info)) != 0) {
         fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(gai_rv));
         return 1;
     }
 
     // bind to socket
-    for (p = server_info; p != NULL; p = p->ai_next) {
-        if ((server_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+    for (curr_server_info = server_info; curr_server_info != NULL; curr_server_info = curr_server_info->ai_next) {
+        if ((server_socket = socket(curr_server_info->ai_family, curr_server_info->ai_socktype, curr_server_info->ai_protocol)) == -1) {
             perror("server: socket error");
             continue;
         }
@@ -65,7 +65,7 @@ int bind_socket(int sock_type, int opt_name, int *option) {
             exit(1);
         }
 
-        if (bind(server_socket, p->ai_addr, p->ai_addrlen) == -1) {
+        if (bind(server_socket, curr_server_info->ai_addr, curr_server_info->ai_addrlen) == -1) {
             close(server_socket);
             perror("server: couldn't bind to address");
             continue;
@@ -75,7 +75,7 @@ int bind_socket(int sock_type, int opt_name, int *option) {
 
     freeaddrinfo(server_info);
 
-    if (p == NULL)  {
+    if (curr_server_info == NULL)  {
         fprintf(stderr, "server: failed to bind\n");
         exit(1);
     }
@@ -88,8 +88,7 @@ int bind_socket(int sock_type, int opt_name, int *option) {
     return server_socket;
 }
 
-int main(void)
-{
+int main(void) {
     int client_socket = -1, option = 1;
     socklen_t address_size = -1;
     struct sockaddr_storage client_address;
@@ -97,11 +96,11 @@ int main(void)
     char client_ip[INET6_ADDRSTRLEN];
     memset(client_ip, '\0', sizeof(client_ip));
 
-    // tcp server socket
-    // int server_socket = bind_socket(SOCK_STREAM, SO_REUSEADDR, &option);
+    // tcp socket
+    int server_socket = bind_socket(SOCK_STREAM, SO_REUSEADDR, &option);
     
-    // udp server socket
-    int server_socket = bind_socket(SOCK_DGRAM, SOCK_DGRAM, &option);
+    // udp socket
+    // int server_socket = bind_socket(SOCK_DGRAM, SOCK_DGRAM, &option);
 
     setup_sigchld_handling();
 
@@ -116,21 +115,25 @@ int main(void)
             continue;
         }
 
+        // Show client's IP
         inet_ntop(client_address.ss_family, get_socket_address((struct sockaddr *)&client_address), client_ip, sizeof client_ip);
         printf("server: got connection from %s\n", client_ip);
 
         if (fork() == 0) {
             // server stops listening
             close(server_socket);
+            int admin_flag;
 
-            char admin_flag;
-            recv(client_socket, &admin_flag, 1, 0);     // Receives the client's flag
+            // Receives the client's flag
+            if (recv(client_socket, &admin_flag, sizeof admin_flag, 0) <= 0) {
+                perror("server: error receiving client's flag");
+                close(client_socket);
+                continue;
+            }
 
-            if (admin_flag == '1')
-                serve_client_admin((struct sockaddr *)&client_address, &address_size, client_socket);
-            else
-                serve_client((struct sockaddr *)&client_address, &address_size, client_socket);
+            serve_client(admin_flag, (struct sockaddr *)&client_address, &address_size, client_socket);
         }
+
         close(client_socket);
     }
 
