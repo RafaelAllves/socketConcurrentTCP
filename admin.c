@@ -34,7 +34,31 @@ void send_to_server(int sockfd, const char *format, ...) {
     memset(message, 0, sizeof(message));
 }
 
-void receive_from_server(int sockfd) {
+void send_file(int sockfd, char *filename) {
+    char buffer[1024];
+    char filepath[1024] = "./";
+    filename[strcspn(filename, "\n")] = '\0'; // Adicione esta linha
+    strcat(filepath, filename);
+    printf("Tentando abrir o arquivo: '%s'\n", filename);
+    FILE *fp = fopen(filepath, "rb");
+    if (fp == NULL) {
+        perror("Erro ao abrir o arquivo");
+        return;
+    }
+    printf("Arquivo aberto com sucesso.\n");
+    size_t bytes_read;
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
+        if (send(sockfd, buffer, bytes_read, 0) == -1) {
+            perror("Erro ao enviar o arquivo.");
+            exit(1);
+        }
+        // printf("Enviando: %s\n", buffer);
+    }
+    printf("Arquivo enviado com sucesso.\n");
+    fclose(fp);
+}
+
+int receive_from_server(int sockfd) {
     char buffer[2048] = "\0"; // Buffer size
     int total_bytes_received = 0;
     int bytes_received = -1;
@@ -50,22 +74,25 @@ void receive_from_server(int sockfd) {
             } else {
                 perror("recv");
             }
-            return;
+            return -1;
         }
         total_bytes_received += bytes_received;
         buffer[total_bytes_received] = '\0';
         printf("%s", buffer);
 
-        if (strstr(buffer, "::\n") != NULL) {
+        if (strstr(buffer, ":::\n") != NULL) {
+            // File request
+            return 2;
+        } else if (strstr(buffer, "::\n") != NULL) {
             // Stops reading messages from the server when it encounters '::\n'
             memset(buffer, 0, sizeof(buffer));
+            return 1;
             break;
         }
     }
     memset(buffer, 0, sizeof(buffer));
 
 }
-
 
 int main(int argc, char *argv[]) {
     int sockfd = -1;
@@ -120,14 +147,22 @@ int main(int argc, char *argv[]) {
     freeaddrinfo(servinfo); // all done with this structure
 
     while(1) {
-        receive_from_server(sockfd); // Wait for the message from the server
+        int op = receive_from_server(sockfd); // Wait for the message from the server
 
         char message_to_server[100] = "\0";
         fgets(message_to_server, sizeof(message_to_server), stdin);
 
-        send_to_server(sockfd, "%s", message_to_server);
-        memset(message_to_server, 0, sizeof(message_to_server));
+        // If the server asks for the song file, send the file
+        if (op == 2) { // '2' for filer, '1' for message
+            printf("Repita o nome do arquivo\n"); //Fixme: Na primeira vez q digita o caminho nao funciona, precisa digitar 2 vezes
+            char filename[100];
+            fgets(filename, sizeof(filename), stdin);
+            send_file(sockfd, filename);
+        } else {
+            send_to_server(sockfd, "%s", message_to_server);
+        }
 
+        memset(message_to_server, 0, sizeof(message_to_server));
     }
 
     close(sockfd);
