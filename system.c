@@ -17,6 +17,8 @@ struct Music {
     char type[50];
     char chore[255];
     int year;
+    char file[100];  // campo para o nome do arquivo da música
+    char *content;  // novo campo para o conteúdo da música
     struct Music *next;
 };
 
@@ -232,6 +234,33 @@ void show_music(int connfd, struct Music *music) {
 
 /* Specified Functions */
 
+void receive_file(int connfd, char *filename) {
+    printf("filename: %s\n", filename);
+    char buffer[1024];
+    int bytesReceived = 0;
+    FILE *fp;
+    fp = fopen(filename, "w"); 
+    if(NULL == fp){
+        printf("Erro ao abrir o arquivo");
+        return;
+    }
+    while((bytesReceived = read(connfd, buffer, 1024)) > 0){
+        printf("Bytes recebidos %d\n",bytesReceived);    
+        fwrite(buffer, 1,bytesReceived,fp);
+        if (bytesReceived < 1024) {
+            break;
+        }
+        
+    }
+
+    if(bytesReceived < 0){
+        printf("\n Erro de leitura \n");
+    }
+    fclose(fp);
+    memset(buffer, 0, sizeof(buffer));
+    return;
+}
+
 void add_song(int connfd) {
     char answer = '\0';
     struct Musics musics;
@@ -262,6 +291,17 @@ void add_song(int connfd) {
 
         send_to_client(connfd, "Genero musical::\n");
         listen_for_client(connfd, " %[^\n]", music->type);
+
+        send_to_client(connfd, "Nome do arquivo da musica:::\n");
+        // listen_for_client(connfd, " %[^\n]", music->file);
+
+
+        char filepath[1024];
+        printf("musicFile: %d\n", music->id);
+        sprintf(filepath, "musicas/%d.mp3", music->id); // Fixme: O codigo so aceita arquivos .mp3
+        printf("filepath: %s\n", filepath);
+        receive_file(connfd, filepath);
+
 
         while (answer != 's' && answer != 'n') {
             send_to_client(connfd, "Possui refrão? (s/n)::\n");
