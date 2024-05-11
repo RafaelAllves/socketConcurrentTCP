@@ -148,17 +148,17 @@ int main(int argc, char *argv[]) {
 
     while(1) {
         int op = receive_from_server(sockfd); // Wait for the message from the server
-
         char message_to_server[100] = "\0";
-        fgets(message_to_server, sizeof(message_to_server), stdin);
+
 
         // If the server asks for the song file, send the file
         if (op == 2) { // '2' for filer, '1' for message
-            printf("Repita o nome do arquivo\n"); //Fixme: Na primeira vez q digita o caminho nao funciona, precisa digitar 2 vezes
             char filename[100];
             fgets(filename, sizeof(filename), stdin);
             send_file(sockfd, filename);
+            memset(filename, 0, sizeof(filename));
         } else {
+            fgets(message_to_server, sizeof(message_to_server), stdin);
             send_to_server(sockfd, "%s", message_to_server);
         }
 
