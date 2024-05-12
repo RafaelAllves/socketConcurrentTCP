@@ -43,7 +43,7 @@ void *get_socket_address(struct sockaddr *sa) {
 int bind_socket(int sock_type, int opt_name, int *option) {
     int server_socket = -1, gai_rv = -1;
     struct addrinfo addr_init, *server_info, *curr_server_info;
-    memset(&addr_init, 0, sizeof addr_init);
+    memset(&addr_init, '\0', sizeof addr_init);
 
     addr_init.ai_family = AF_UNSPEC;        // use IPv4 or IPv6, whichever
     addr_init.ai_socktype = sock_type;      
@@ -120,7 +120,6 @@ int main(void) {
         printf("server: got connection from %s\n", client_ip);
 
         if (fork() == 0) {
-            close(server_socket);
             int admin_flag;
 
             if (recv(client_socket, &admin_flag, sizeof admin_flag, 0) <= 0) {
@@ -129,14 +128,15 @@ int main(void) {
                 continue;
             }
 
-            if (admin_flag == 1) {
-                serve_client_admin(client_ip, client_socket);
-            } else {
-                serve_client(client_ip, client_socket); 
-            }
+            serve_client(admin_flag, (struct sockaddr *)&client_address, &address_size, client_socket);
+
+            inet_ntop(client_address.ss_family, get_socket_address((struct sockaddr *)&client_address), client_ip, sizeof client_ip);
+            printf("server: %s disconnected\n", client_ip);
         }
         close(client_socket);
     }
+
+    close(server_socket);
 
     return 0;
 }

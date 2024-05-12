@@ -24,7 +24,7 @@ void *get_in_addr(struct sockaddr *sa) {
 
 void send_to_server(int sockfd, const char *format, ...) {
     char message[100];
-    //memset(message, '\0', sizeof(message));
+    memset(message, '\0', sizeof(message));
     va_list args;
 
     va_start(args, format);
@@ -34,7 +34,6 @@ void send_to_server(int sockfd, const char *format, ...) {
     if (send(sockfd, message, strlen(message), 0) == -1) {
         perror("send");
     }
-    memset(message, 0, sizeof(message));        //comentar
 }
 
 void send_file(int sockfd, char *filename) {
@@ -62,12 +61,12 @@ void send_file(int sockfd, char *filename) {
 }
 
 int receive_from_server(int sockfd) {
-    char buffer[buffer_size]; // Buffer size
+    char buffer[buffer_size];
     int total_bytes_received = 0;
     int bytes_received = -1;
 
     while (1) {
-        memset(buffer, 0, sizeof(buffer));        
+        memset(buffer, '\0', sizeof(buffer));        
         bytes_received = recv(sockfd, buffer, sizeof(buffer), 0);
 
         if (bytes_received == 0) {
@@ -77,6 +76,7 @@ int receive_from_server(int sockfd) {
             perror("recv error");
             return -1;
         }
+
         total_bytes_received += bytes_received;
         buffer[total_bytes_received] = '\0';
         printf("%s", buffer);
@@ -86,12 +86,9 @@ int receive_from_server(int sockfd) {
             return 2;
         } else if (strstr(buffer, "::\n") != NULL) {
             // Stops reading messages from the server when it encounters '::\n'
-            memset(buffer, 0, sizeof(buffer));
             return 1;
-            break;
         }
     }
-    memset(buffer, 0, sizeof(buffer));
 
 }
 
@@ -99,7 +96,7 @@ int connect_to_server(char * server_addr, int sock_type, int opt_name) {
     int sockfd = -1, gai_rv = -1;
     char server_ip[INET6_ADDRSTRLEN];
     struct addrinfo addr_init, *server_info, *curr_server_info;
-    memset(&addr_init, 0, sizeof addr_init);
+    memset(&addr_init, '\0', sizeof addr_init);
 
     addr_init.ai_family = AF_UNSPEC;        // use IPv4 or IPv6, whichever
     addr_init.ai_socktype = sock_type;      // sets protocol, TCP=SOCK_STREAM or UDP=SOCK_DGRAM
@@ -128,8 +125,6 @@ int connect_to_server(char * server_addr, int sock_type, int opt_name) {
         break;
     }
 
-    freeaddrinfo(server_info);
-
     if (curr_server_info == NULL)  {
         fprintf(stderr, "server: failed to connect to host\n");
         return 2;
@@ -138,6 +133,8 @@ int connect_to_server(char * server_addr, int sock_type, int opt_name) {
     // Show server's IP
     inet_ntop(curr_server_info->ai_family, get_in_addr((struct sockaddr *)curr_server_info->ai_addr), server_ip, sizeof server_ip);
     printf("client: conectado a %s\n", server_ip);
+
+    freeaddrinfo(server_info);
 
     return sockfd;
 }
@@ -163,15 +160,15 @@ int main(int argc, char *argv[]) {
         // If the server asks for the song file, send the file
         if (op == 2) { // '2' for filer, '1' for message
             char filename[100];
+            memset(filename, '\0', sizeof(filename));
             fgets(filename, sizeof(filename), stdin);
             send_file(sockfd, filename);
-            memset(filename, 0, sizeof(filename));
         } else {
+            memset(message_to_server, '\0', sizeof(message_to_server));
             fgets(message_to_server, sizeof(message_to_server), stdin);
             send_to_server(sockfd, "%s", message_to_server);
         }
 
-        //memset(message_to_server, 0, sizeof(message_to_server));
     }
 
     close(sockfd);
