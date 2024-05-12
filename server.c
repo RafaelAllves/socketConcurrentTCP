@@ -121,7 +121,7 @@ int main(void) {
 
         if (fork() == 0) {
             close(server_socket);
-            char admin_flag;
+            int admin_flag;
 
             if (recv(client_socket, &admin_flag, sizeof admin_flag, 0) <= 0) {
                 perror("server: error receiving client's flag");
@@ -129,13 +129,11 @@ int main(void) {
                 continue;
             }
 
-            if (admin_flag == '1') {
+            if (admin_flag == 1) {
                 serve_client_admin(client_ip, client_socket);
             } else {
                 serve_client(client_ip, client_socket); 
             }
-
-            close(client_socket);
         }
         close(client_socket);
     }
