@@ -63,7 +63,7 @@ void listen_for_client(struct Conn * conn, const char *format, ...) {
         }
 
         if (vsscanf(buffer, format, args) < 1) {
-            send_to_client(conn, "\nValor invalido! Tente novamente::\n");
+            send_to_client(conn, "\nValor invalido! Tente novamente\ufeff\n");
         } else {
             break;
         }
@@ -216,7 +216,7 @@ void screen_pause(struct Conn * conn) {
     char input[256];
     memset(input, '\0', sizeof(input));
     
-    send_to_client(conn, "\nPressione 1 para retornar ao menu principal::\n");
+    send_to_client(conn, "\nPressione 1 para retornar ao menu principal\ufeff\n");
 
     listen_for_client(conn, "%s", input);
 
@@ -281,19 +281,19 @@ void add_song(struct Conn * conn) {
 
         send_to_client(conn, "\nPreencha os seguintes campos para adicionar uma musica.\n");
 
-        send_to_client(conn, "Titulo::\n");
+        send_to_client(conn, "Titulo:\ufeff\n");
         listen_for_client(conn, " %[^\n]", music->title);
 
-        send_to_client(conn, "Interprete::\n");
+        send_to_client(conn, "Interprete:\ufeff\n");
         listen_for_client(conn, " %[^\n]", music->artist);
 
-        send_to_client(conn, "Idioma::\n");
+        send_to_client(conn, "Idioma:\ufeff\n");
         listen_for_client(conn, " %[^\n]", music->language);
 
-        send_to_client(conn, "Genero musical::\n");
+        send_to_client(conn, "Genero musical:\ufeff\n");
         listen_for_client(conn, " %[^\n]", music->type);
 
-        send_to_client(conn, "Nome do arquivo da musica:::\n");
+        send_to_client(conn, "Nome do arquivo da musica:\ufeff\ufeff\n");
         // listen_for_client(conn, " %[^\n]", music->file);
 
 
@@ -305,25 +305,25 @@ void add_song(struct Conn * conn) {
 
 
         while (answer != 's' && answer != 'n') {
-            send_to_client(conn, "Possui refrão? (s/n)::\n");
+            send_to_client(conn, "Possui refrão? (s/n)\ufeff\n");
             listen_for_client(conn, " %c", &answer);
 
             if (answer == 's') {
-                send_to_client(conn, "Insira o Refrão::\n");
+                send_to_client(conn, "Insira o Refrão:\ufeff\n");
                 listen_for_client(conn, " %[^\n]", music->chore);
             } else {
                 strcpy(music->chore, "Não possui");
             }
         }        
 
-        send_to_client(conn, "Ano de lancamento::\n");
+        send_to_client(conn, "Ano de lancamento:\ufeff\n");
         listen_for_client(conn, " %d", &music->year);
 
         music->next = musics.musics;
 
         musics.musics = music;
 
-        send_to_client(conn, "\nMusica adicionada com sucesso! Deseja adicionar mais musicas? (s/n)::\n");
+        send_to_client(conn, "\nMusica adicionada com sucesso! Deseja adicionar mais musicas? (s/n)\ufeff\n");
         listen_for_client(conn, " %c", &answer);
 
         if (answer == 'n')
@@ -339,7 +339,7 @@ void remove_song(struct Conn * conn) {
     struct Musics musics;
     db_fetch(conn, &musics);
 
-    send_to_client(conn, "\nInsira o ID da musica a ser removida::\n");
+    send_to_client(conn, "\nInsira o ID da musica a ser removida\ufeff\n");
     listen_for_client(conn, " %d", &removeId);
     
     while(musics.musics != NULL && musics.musics->id != removeId)
@@ -361,7 +361,7 @@ void list_by_year(struct Conn * conn) {
     struct Musics musics;
     db_fetch(conn, &musics);
 
-    send_to_client(conn, "\nInsira o ano de lancamento da musica::\n");
+    send_to_client(conn, "\nInsira o ano de lancamento da musica\ufeff\n");
     listen_for_client(conn, " %d", &yearList);
 
     while(musics.musics != NULL) {
@@ -388,10 +388,10 @@ void list_by_year_and_language(struct Conn * conn) {
     struct Musics musics;
     db_fetch(conn, &musics);
 
-    send_to_client(conn, "\nInsira o ano de lancamento da musica::\n");
+    send_to_client(conn, "\nInsira o ano de lancamento da musica\ufeff\n");
     listen_for_client(conn, " %d", &yearList);
 
-    send_to_client(conn, "\nInsira o idioma da musica::\n");
+    send_to_client(conn, "\nInsira o idioma da musica\ufeff\n");
     listen_for_client(conn, " %[^\n]", languageList);
 
     while(musics.musics != NULL) {
@@ -417,7 +417,7 @@ void list_by_type(struct Conn * conn) {
     struct Musics musics;
     db_fetch(conn, &musics);
 
-    send_to_client(conn, "\nInsira o genero musical::\n");
+    send_to_client(conn, "\nInsira o genero musical\ufeff\n");
     listen_for_client(conn, " %[^\n]", typeList);
 
     while(musics.musics != NULL) {
@@ -441,7 +441,7 @@ void search_by_id(struct Conn * conn) {
     db_fetch(conn, &musics);
 
     while (1) {
-        send_to_client(conn, "\nInsira o ID da musica::\n");
+        send_to_client(conn, "\nInsira o ID da musica\ufeff\n");
         listen_for_client(conn, " %d", &searchId);
 
         if (searchId >= 0 && searchId <= musics.n)
@@ -482,7 +482,7 @@ void send_file(struct Conn * conn) {
     db_fetch(conn, &musics);
 
     while (1) {
-        send_to_client(conn, "\nInsira o ID da musica a ser baixada: ::\n");
+        send_to_client(conn, "\nInsira o ID da musica a ser baixada: \ufeff\n");
         listen_for_client(conn, " %d", &searchId);
 
         if (searchId >= 0 && searchId <= musics.n)
@@ -513,24 +513,24 @@ void show_menu(struct Conn * conn, int admin_mode) {
             "1. Adicionar uma musica\n"
             "2. Remover uma musica\n"
             "3. Listar musicas por ano\n"
-            "4. Listar musicas por ano e idioma TCP\n"
-            "5. Listar musicas por genero TCP\n"
+            "4. Listar musicas por ano e idioma \n"
+            "5. Listar musicas por genero \n"
             "6. Consultar musica por ID\n"
             "7. Listar todas as musicas\n"
             "8. Baixar musica\n"
             "9. Encerrar\n\n"
-            "Escolha uma ação (numero): ::\n"
+            "Escolha uma ação (numero): \ufeff\n"
         );
     } else {
         send_to_client(conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
             "1. Listar musicas por ano\n"
-            "2. Listar musicas por ano e idioma TCP\n"
-            "3. Listar musicas por genero TCP\n"
+            "2. Listar musicas por ano e idioma\n"
+            "3. Listar musicas por genero\n"
             "4. Consultar musica por ID\n"
             "5. Listar todas as musicas\n"
             "6. Baixar musica\n"
             "7. Encerrar\n\n"
-            "Escolha uma ação (numero): ::\n"
+            "Escolha uma ação (numero): \ufeff\n"
         );
     }
 }

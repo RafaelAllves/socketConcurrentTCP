@@ -81,11 +81,11 @@ int receive_from_server(int sockfd) {
         buffer[total_bytes_received] = '\0';
         printf("%s", buffer);
 
-        if (strstr(buffer, ":::\n") != NULL) {
+        if (strstr(buffer, "\ufeff\ufeff\n") != NULL) {
             // File request
             return 2;
-        } else if (strstr(buffer, "::\n") != NULL) {
-            // Stops reading messages from the server when it encounters '::\n'
+        } else if (strstr(buffer, "\ufeff\n") != NULL) {
+            // Stops reading messages from the server when it encounters '\ufeff\n'
             return 1;
         }
     }
@@ -131,8 +131,8 @@ int connect_to_server(char * server_addr, int sock_type, int opt_name) {
     }
 
     // Show server's IP
-    inet_ntop(curr_server_info->ai_family, get_in_addr((struct sockaddr *)curr_server_info->ai_addr), server_ip, sizeof server_ip);
-    printf("client: conectado a %s\n", server_ip);
+    // inet_ntop(curr_server_info->ai_family, get_in_addr((struct sockaddr *)curr_server_info->ai_addr), server_ip, sizeof server_ip);
+    // printf("client: conectado a %s\n", server_ip);
 
     freeaddrinfo(server_info);
 
