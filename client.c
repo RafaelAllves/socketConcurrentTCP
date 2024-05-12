@@ -14,6 +14,7 @@
 
 const int admin_flag = 1;       // 1 for admin, 0 for normal user
 const int buffer_size = 2048;
+const char filepath[] = "./musicas";
 
 // Gets the client's IPv4 or IPv6 address
 void *get_in_addr(struct sockaddr *sa) {
@@ -37,18 +38,23 @@ void send_to_server(int sockfd, const char *format, ...) {
 }
 
 void send_file(int sockfd, char *filename) {
-    char buffer[1024];
-    char filepath[1024] = "./";
-    filename[strcspn(filename, "\n")] = '\0'; // Adicione esta linha
-    strcat(filepath, filename);
-    printf("Tentando abrir o arquivo: '%s'\n", filename);
+    char buffer[buffer_size], loadpath[150];
+    memset(loadpath, '\0', sizeof(loadpath));
+
+    sprintf(loadpath, "%s%s", filepath, filename);
+    printf("Carregando arquivo: '%s'\n", filename);
+
     FILE *fp = fopen(filepath, "rb");
+    
     if (fp == NULL) {
-        perror("Erro ao abrir o arquivo");
+        perror("Erro ao carregar arquivo");
         return;
     }
-    printf("Arquivo aberto com sucesso.\n");
+
+    printf("Iniciando envio ao servidor.\n");
+
     size_t bytes_read;
+
     while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
         if (send(sockfd, buffer, bytes_read, 0) == -1) {
             perror("Erro ao enviar o arquivo.");
@@ -56,6 +62,7 @@ void send_file(int sockfd, char *filename) {
         }
         // printf("Enviando: %s\n", buffer);
     }
+
     printf("Arquivo enviado com sucesso.\n");
     fclose(fp);
 }
@@ -81,7 +88,10 @@ int receive_from_server(int sockfd) {
         buffer[total_bytes_received] = '\0';
         printf("%s", buffer);
 
-        if (strstr(buffer, "\ufeff\ufeff\n") != NULL) {
+        if (strstr(buffer, "\ufeff\ufeff\ufeff\n") != NULL) {
+            // File send
+            return 3;
+        } else if (strstr(buffer, "\ufeff\ufeff\n") != NULL) {
             // File request
             return 2;
         } else if (strstr(buffer, "\ufeff\n") != NULL) {
@@ -91,6 +101,60 @@ int receive_from_server(int sockfd) {
     }
 
 }
+
+void receive_file(int sockfd, char *filename) {
+    char buffer[buffer_size];
+    memset(buffer, '\0', sizeof(buffer));
+    FILE *file;
+
+    // Abre o arquivo
+    file = fopen(filename, "wb");
+    if (file == NULL) {
+        perror("Não foi possível abrir o arquivo");
+        exit(EXIT_FAILURE);
+    }
+
+    // Variáveis para armazenar o endereço do cliente
+    struct sockaddr_storage client_address;
+    socklen_t client_address_len = sizeof(client_address);
+
+    // Recebe o tamanho do arquivo
+    long file_size;
+    recvfrom(sockfd, &file_size, sizeof(long), 0, (struct sockaddr *) &client_address, &client_address_len);
+    printf("Tamanho do arquivo: %ld bytes\n", file_size);
+
+    // Recebe os dados do socket e escreve no arquivo
+    long total_bytes_received = 0;
+    int count = 1;
+    while (total_bytes_received < file_size) {
+        printf("Iteração: %d\n", count++);
+        memset(buffer, 0, sizeof(buffer));
+        char bytes_received = recvfrom(sockfd, buffer, buffer_size, 0, (struct sockaddr *) &client_address, &client_address_len);
+        printf("Bytes recebidos nesta iteração: %d\n", bytes_received);
+        // printf("Bbbb: %s\n", buffer);
+        if (bytes_received < 0) {
+            perror("Erro ao receber dados do socket");
+            exit(EXIT_FAILURE);
+        } else if (bytes_received == 0) {
+            printf("Transferência encerrada prematuramente.\n");
+            break;
+        }
+        fwrite(buffer, 1, bytes_received, file);
+        total_bytes_received += bytes_received;
+        printf("Total de bytes recebidos: %ld\n", total_bytes_received);
+        printf("Total file_size: %ld\n", file_size);
+        printf("%d\n", total_bytes_received < file_size);
+    }
+
+    if (total_bytes_received != file_size) {
+        printf("Transferência incompleta.\n");
+    } else {
+        printf("Transferência concluída.\n");
+    }
+
+    fclose(file);
+}
+
 
 int connect_to_server(char * server_addr, int sock_type, int opt_name) {
     int sockfd = -1, gai_rv = -1;
@@ -156,14 +220,21 @@ int main(int argc, char *argv[]) {
         int op = receive_from_server(sockfd);       // Wait for the message from the server
         char message_to_server[100];
 
-
         // If the server asks for the song file, send the file
-        if (op == 2) { // '2' for filer, '1' for message
+        if (op == 2) {      // '2' for file, '1' for message
             char filename[100];
             memset(filename, '\0', sizeof(filename));
             fgets(filename, sizeof(filename), stdin);
+
+            send_to_server(sockfd, "%s", filename);     // Send the music name
             send_file(sockfd, filename);
-        } else {
+
+        } else if (op == 3) { // '3' para música // Se o servidor envia a música, receba o arquivo 
+            char filename[100];
+            memset(filename, 0, sizeof(filename));
+            sprintf(filename, "./musicas_recebidas/%s.mp3", "nome_da_musica");
+            receive_file(sockfd, filename);
+        }else {
             memset(message_to_server, '\0', sizeof(message_to_server));
             fgets(message_to_server, sizeof(message_to_server), stdin);
             send_to_server(sockfd, "%s", message_to_server);
