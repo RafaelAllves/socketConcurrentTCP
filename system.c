@@ -52,12 +52,10 @@ void send_to_client(struct Conn * conn, const char *format, ...) {
 void listen_for_client(struct Conn * conn, const char *format, ...) {
     char buffer[buffer_size];
     memset(buffer, '\0', sizeof(buffer));
-
     va_list args;
     va_start(args, format);
 
     while(1) {
-        fflush(stdin);
 
         if (recv(conn->connfd, buffer, sizeof(buffer), 0) == -1) {
             perror("msg recv error");
@@ -215,10 +213,9 @@ void screen_pause(struct Conn * conn) {
     char input[buffer_size];
     memset(input, '\0', sizeof(input));
     
-    send_to_client(conn, "\nPressione ENTER para retornar ao menu principal: \ufeff");
-
+    send_to_client(conn, "\nPressione 1 para retornar ao menu principal: \ufeff");
+    
     listen_for_client(conn, "%s", input);
-
 }
 
 void show_music_preview(struct Conn * conn, struct Music *music) {

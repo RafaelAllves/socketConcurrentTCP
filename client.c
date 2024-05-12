@@ -42,7 +42,7 @@ void recv_msg(int client_socket, char *buffer, int *total_bytes_received) {
     int buffer_size = sizeof(buffer), bytes_received = -1, flag = 0;
     memset(buffer, '\0', buffer_size);
 
-    bytes_received = recv(client_socket, buffer, buffer_size, flag);
+    bytes_received = recv(client_socket, buffer, sizeof(buffer), flag);
 
     if (bytes_received == 0) {
         printf("Conexão encerrada pelo servidor.\n");
@@ -59,6 +59,7 @@ void recv_msg(int client_socket, char *buffer, int *total_bytes_received) {
 void receive_from_server(int client_socket) {
     int total_bytes_received = 0;
     char buffer[buffer_size];
+    //memset(buffer, '\0', sizeof(buffer));
 
     while (1) {
         recv_msg(client_socket, buffer, &total_bytes_received);
@@ -89,7 +90,7 @@ void initialize_client(int sock_type) {
     
     // Show client IP
     inet_ntop(client_info->ai_family, get_in_addr((struct sockaddr *)client_info->ai_addr), client_ip, sizeof client_ip);
-    printf("client: conectado a %s\n", client_ip);
+    printf("client IP: %s\n", client_ip);
 }
 
 
@@ -159,13 +160,15 @@ int main(int argc, char *argv[]) {
     while(1) {
         receive_from_server(server_socket);     // Wait for message from the server
 
+        
+
         char message_to_server[buffer_size];
         memset(message_to_server, '\0', sizeof(message_to_server));
 
         fgets(message_to_server, sizeof(message_to_server), stdin);
         
         send_to_server(server_socket, "%s", message_to_server);
-
+        
     }
 
     freeaddrinfo(client_info);
