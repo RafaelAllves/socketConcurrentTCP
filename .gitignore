@@ -57,4 +57,5 @@ executables
 
 # Files
 musicas/*
-
+dev
+*.sqlite3

@@ -10,18 +10,21 @@
 #include <arpa/inet.h>
 #include <stdarg.h>
 
-#define PORT "3490" // Port for connecting to the server
+#define PORT "3490"     // Port for connecting to the server
+
+const int admin_flag = 1;       // 1 for admin, 0 for normal user
+const int buffer_size = 2048;
 
 // Gets the client's IPv4 or IPv6 address
 void *get_in_addr(struct sockaddr *sa) {
-    if (sa->sa_family == AF_INET) {
+    if (sa->sa_family == AF_INET)
         return &(((struct sockaddr_in*)sa)->sin_addr);
-    }
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
 void send_to_server(int sockfd, const char *format, ...) {
-    char message[100] = "\0";
+    char message[100];
+    memset(message, '\0', sizeof(message));
     va_list args;
 
     va_start(args, format);
@@ -31,102 +34,140 @@ void send_to_server(int sockfd, const char *format, ...) {
     if (send(sockfd, message, strlen(message), 0) == -1) {
         perror("send");
     }
-    memset(message, 0, sizeof(message));
 }
 
-void receive_from_server(int sockfd) {
-    char buffer[2048] = "\0"; // Buffer size
+void send_file(int sockfd, char *filename) {
+    char buffer[1024];
+    char filepath[1024] = "./";
+    filename[strcspn(filename, "\n")] = '\0'; // Adicione esta linha
+    strcat(filepath, filename);
+    printf("Tentando abrir o arquivo: '%s'\n", filename);
+    FILE *fp = fopen(filepath, "rb");
+    if (fp == NULL) {
+        perror("Erro ao abrir o arquivo");
+        return;
+    }
+    printf("Arquivo aberto com sucesso.\n");
+    size_t bytes_read;
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
+        if (send(sockfd, buffer, bytes_read, 0) == -1) {
+            perror("Erro ao enviar o arquivo.");
+            exit(1);
+        }
+        // printf("Enviando: %s\n", buffer);
+    }
+    printf("Arquivo enviado com sucesso.\n");
+    fclose(fp);
+}
+
+int receive_from_server(int sockfd) {
+    char buffer[buffer_size];
     int total_bytes_received = 0;
     int bytes_received = -1;
 
     while (1) {
-        memset(buffer, 0, sizeof(buffer));
+        memset(buffer, '\0', sizeof(buffer));        
         bytes_received = recv(sockfd, buffer, sizeof(buffer), 0);
 
-        if (bytes_received <= 0) {
-            if (bytes_received == 0) {
-                printf("Conexão encerrada pelo servidor.\n");
-                exit(0);
-            } else {
-                perror("recv");
-            }
-            return;
+        if (bytes_received == 0) {
+            printf("Conexão encerrada pelo servidor.\n");
+            exit(0);
+        } else if (bytes_received < 0) {
+            perror("recv error");
+            return -1;
         }
+
         total_bytes_received += bytes_received;
         buffer[total_bytes_received] = '\0';
         printf("%s", buffer);
 
-        if (strstr(buffer, "::\n") != NULL) {
-            // Stops reading messages from the server when it encounters '::\n'
-            memset(buffer, 0, sizeof(buffer));
-            break;
+        if (strstr(buffer, "\ufeff\ufeff\n") != NULL) {
+            // File request
+            return 2;
+        } else if (strstr(buffer, "\ufeff\n") != NULL) {
+            // Stops reading messages from the server when it encounters '\ufeff\n'
+            return 1;
         }
     }
-    memset(buffer, 0, sizeof(buffer));
 
 }
 
+int connect_to_server(char * server_addr, int sock_type, int opt_name) {
+    int sockfd = -1, gai_rv = -1;
+    char server_ip[INET6_ADDRSTRLEN];
+    struct addrinfo addr_init, *server_info, *curr_server_info;
+    memset(&addr_init, '\0', sizeof addr_init);
 
-int main(int argc, char *argv[]) {
-    int sockfd = -1;
-    struct addrinfo hints, *servinfo, *p;
-    int rv = -1;
-    char s[INET6_ADDRSTRLEN] = "\0";
-    char *server_ip = "localhost";
+    addr_init.ai_family = AF_UNSPEC;        // use IPv4 or IPv6, whichever
+    addr_init.ai_socktype = sock_type;      // sets protocol, TCP=SOCK_STREAM or UDP=SOCK_DGRAM
 
-    if (argc > 2 && strcmp(argv[1], "-i") == 0) {
-        server_ip = argv[2];
-    }
-
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-
-    if ((rv = getaddrinfo(server_ip, PORT, &hints, &servinfo)) != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+    if ((gai_rv = getaddrinfo(server_addr, PORT, &addr_init, &server_info)) != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(gai_rv));
         return 1;
     }
 
-    for (p = servinfo; p != NULL; p = p->ai_next) {
-        if ((sockfd = socket(p->ai_family, p->ai_socktype,
-                p->ai_protocol)) == -1) {
+    // loop through all the results and connect to the first we can
+    for (curr_server_info = server_info; curr_server_info != NULL; curr_server_info = curr_server_info->ai_next) {
+        if ((sockfd = socket(curr_server_info->ai_family, curr_server_info->ai_socktype, curr_server_info->ai_protocol)) == -1) {
             perror("client: socket");
             continue;
         }
 
-        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+        if (connect(sockfd, curr_server_info->ai_addr, curr_server_info->ai_addrlen) == -1) {
             close(sockfd);
             perror("client: connect");
             continue;
         }
 
-        char admin_flag = '0'; // '1' for admin, '0' for normal user
-        if (send(sockfd, &admin_flag, 1, 0) == -1) {
-            perror("send");
+        if (send(sockfd, &admin_flag, sizeof admin_flag, 0) == -1) {
+            perror("error setting user type");
         }
-
         break;
     }
 
-    if (p == NULL) {
-        fprintf(stderr, "client: failed to connect\n");
+    if (curr_server_info == NULL)  {
+        fprintf(stderr, "server: failed to connect to host\n");
         return 2;
     }
 
-    inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
-            s, sizeof s);
-    printf("client: conectado a %s\n", s);
+    // Show server's IP
+    // inet_ntop(curr_server_info->ai_family, get_in_addr((struct sockaddr *)curr_server_info->ai_addr), server_ip, sizeof server_ip);
+    // printf("client: conectado a %s\n", server_ip);
 
-    freeaddrinfo(servinfo); // all done with this structure
+    freeaddrinfo(server_info);
+
+    return sockfd;
+}
+
+int main(int argc, char *argv[]) {
+    char *server_alias = "localhost";
+
+    // Manage user input of where the server is
+    if (argc > 2 && strcmp(argv[1], "-i") == 0)
+        server_alias = argv[2];
+    
+    // tcp socket
+    int sockfd = connect_to_server(server_alias, SOCK_STREAM, SO_REUSEADDR);
+    
+    // udp socket
+    // int sockfd = connect_to_server(server_alias, SOCK_DGRAM, SOCK_DGRAM);
 
     while(1) {
-        receive_from_server(sockfd); // Wait for the message from the server
+        int op = receive_from_server(sockfd);       // Wait for the message from the server
+        char message_to_server[100];
 
-        char message_to_server[100] = "\0";
-        fgets(message_to_server, sizeof(message_to_server), stdin);
 
-        send_to_server(sockfd, "%s", message_to_server);
-        memset(message_to_server, 0, sizeof(message_to_server));
+        // If the server asks for the song file, send the file
+        if (op == 2) { // '2' for filer, '1' for message
+            char filename[100];
+            memset(filename, '\0', sizeof(filename));
+            fgets(filename, sizeof(filename), stdin);
+            send_file(sockfd, filename);
+        } else {
+            memset(message_to_server, '\0', sizeof(message_to_server));
+            fgets(message_to_server, sizeof(message_to_server), stdin);
+            send_to_server(sockfd, "%s", message_to_server);
+        }
 
     }
 
