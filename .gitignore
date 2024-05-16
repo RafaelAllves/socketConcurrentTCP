@@ -59,3 +59,4 @@ executables
 musicas/*
 dev
 *.sqlite3
+*.mp3

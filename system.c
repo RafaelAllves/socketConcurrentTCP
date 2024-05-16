@@ -19,7 +19,7 @@ struct Music {
     char type[50];
     char chore[255];
     int year;
-    char file[100];  // campo para o nome do arquivo da música
+    char filename[100];  // campo para o nome do arquivo da música
     char *content;  // novo campo para o conteúdo da música
     struct Music *next;
 };
@@ -123,7 +123,7 @@ int db_pull(struct Conn * conn, struct Musics *musics) {
     struct Music *current = musics->musics;
     while (current != NULL) {
         sqlite3_stmt *stmt = NULL;
-        sql = "INSERT OR IGNORE INTO music (title, artist, language, type, chore, year) VALUES (?, ?, ?, ?, ?, ?)";
+        sql = "INSERT OR IGNORE INTO music (title, artist, language, type, chore, year, filename) VALUES (?, ?, ?, ?, ?, ?, ?)";
         rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
         db_sql_check(conn, rc, db);
 
@@ -134,6 +134,7 @@ int db_pull(struct Conn * conn, struct Musics *musics) {
         sqlite3_bind_text(stmt, 4, current->type, -1, SQLITE_TRANSIENT);
         sqlite3_bind_text(stmt, 5, current->chore, -1, SQLITE_TRANSIENT);
         sqlite3_bind_int(stmt, 6, current->year);
+        sqlite3_bind_text(stmt, 7, current->filename, -1, SQLITE_TRANSIENT);
 
         // Execute the statement and check for errors
         rc = sqlite3_step(stmt);
@@ -183,6 +184,7 @@ void db_fetch(struct Conn * conn, struct Musics *musics) {
         strcpy(music->type, (const char *)sqlite3_column_text(stmt, 4));
         strcpy(music->chore, (const char *)sqlite3_column_text(stmt, 5));
         music->year = sqlite3_column_int(stmt, 6);
+        strcpy(music->filename, (const char *)sqlite3_column_text(stmt, 7));
 
         music->next = musics->musics;
         musics->musics = music;
@@ -205,7 +207,7 @@ void db_initialize(struct Conn * conn) {
     int rc = sqlite3_open(DB_NAME, &db);
     db_sql_check(conn, rc, db);
 
-    char *sql = "CREATE TABLE IF NOT EXISTS music (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, artist TEXT, language TEXT, type TEXT, chore TEXT, year INTEGER)";
+    char *sql = "CREATE TABLE IF NOT EXISTS music (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, artist TEXT, language TEXT, type TEXT, chore TEXT, year INTEGER, filename TEXT)";
     rc = sqlite3_exec(db, sql, NULL, NULL, NULL);
     db_sql_check(conn, rc, db);
 
@@ -238,35 +240,52 @@ void show_music(struct Conn * conn, struct Music *music) {
 /* Specified Functions */
 
 void receive_file(struct Conn * conn, char *filename) {
-    printf("Recebendo arquivo: %s\n", filename);
-
-    char buffer[buffer_size], savepath[150];
+    char buffer[buffer_size], savepath[150], totalBytesRaw[100];
     memset(buffer, '\0', sizeof(buffer));
     memset(savepath, '\0', sizeof(savepath));
-    int bytesReceived = 0;
+    memset(totalBytesRaw, '\0', sizeof(totalBytesRaw));
+    size_t bytes_received = 0;
     FILE *fp;
 
-    sprintf(savepath, "%s%s", filepath, filename);
+    sprintf(savepath, "%s/%s", filepath, filename);
+
+    if (recv(conn->connfd, totalBytesRaw, sizeof(totalBytesRaw), 0) == -1) {
+        perror("msg recv error");
+    }
+
+    long totalBytes = strtol(totalBytesRaw, NULL, 10);
+
+    printf("Recebendo arquivo: %s com %ld bytes\n", filename, totalBytes);
 
     if((fp = fopen(savepath, "wb")) == NULL){
-        printf("Erro ao salvar arquivo");
+        printf("Erro abrir arquivo");
         return;
     }
 
-    while((bytesReceived = read(conn->connfd, buffer, sizeof buffer)) > 0){
+    send_to_client(conn, "Iniciando transferencia...\ufeff\n");
 
-        printf("Bytes recebidos %d\n", bytesReceived);    
-        fwrite(buffer, 1, bytesReceived, fp);
+    while (bytes_received < totalBytes) {
+        int bytes_to_recv = (totalBytes - bytes_received < buffer_size) ? (totalBytes - bytes_received) : buffer_size;
+        int bytes_read = recv(conn->connfd, buffer, bytes_to_recv, 0);
+        if (bytes_read == -1) {
+            perror("recv file");
+            fclose(fp);
+            exit(1);
+        } else if (bytes_read == 0) {
+            // Connection closed by server
+            printf("Server closed connection\n");
+            fclose(fp);
+            exit(1);
+        }
 
-        if (bytesReceived < buffer_size)
-            break;
-    }
-
-    if(bytesReceived < 0){
-        printf("\n Erro de escrita \n");
+        bytes_received += bytes_read;
+        fwrite(buffer, 1, bytes_read, fp);
     }
 
     fclose(fp);
+
+    printf("Arquivo recebido com sucesso!\n");
+    send_to_client(conn, "\nArquivo recebido com sucesso!\ufeff\n");
 
     return;
 }
@@ -325,8 +344,8 @@ void add_song(struct Conn * conn) {
     musics.n = 0;
 
     while (1) {
-        strcpy(&answer, "\0");
-
+        answer = '\0';
+        
         struct Music *music = (struct Music *)malloc(sizeof(struct Music));
         if (music == NULL) {
             send_to_client(conn, "\nErro ao alocar memoria para nova musica!\n\n");
@@ -349,11 +368,13 @@ void add_song(struct Conn * conn) {
         send_to_client(conn, "Genero musical:\ufeff\n");
         listen_for_client(conn, " %[^\n]", music->type);
 
-        send_to_client(conn, "Nome do arquivo da musica (ex: hello.mp3):\ufeff\ufeff\n");
-        listen_for_client(conn, " %[^\n]", music->file);
+        send_to_client(conn, "Um arquivo com a musica dentro da pasta [musicas] sera enviado.\n");
+
+        send_to_client(conn, "Insira o nome do arquivo da musica (ex: hello.mp3):\ufeff\ufeff\n");
+        listen_for_client(conn, " %[^\n]", music->filename);
 
         memset(filename, '\0', sizeof(filename));
-        sprintf(filename, "%s", music->file);  
+        sprintf(filename, "%s", music->filename);
         receive_file(conn, filename);
 
         while (answer != 's' && answer != 'n') {

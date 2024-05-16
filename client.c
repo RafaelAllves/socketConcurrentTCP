@@ -9,6 +9,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <stdarg.h>
+#include <unistd.h>
 
 #define PORT "3490"     // Port for connecting to the server
 
@@ -37,36 +38,6 @@ void send_to_server(int sockfd, const char *format, ...) {
     }
 }
 
-void send_file(int sockfd, char *filename) {
-    char buffer[buffer_size], loadpath[150];
-    memset(loadpath, '\0', sizeof(loadpath));
-
-    sprintf(loadpath, "%s%s", filepath, filename);
-    printf("Carregando arquivo: '%s'\n", filename);
-
-    FILE *fp = fopen(filepath, "rb");
-    
-    if (fp == NULL) {
-        perror("Erro ao carregar arquivo");
-        return;
-    }
-
-    printf("Iniciando envio ao servidor.\n");
-
-    size_t bytes_read;
-
-    while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
-        if (send(sockfd, buffer, bytes_read, 0) == -1) {
-            perror("Erro ao enviar o arquivo.");
-            exit(1);
-        }
-        // printf("Enviando: %s\n", buffer);
-    }
-
-    printf("Arquivo enviado com sucesso.\n");
-    fclose(fp);
-}
-
 int receive_from_server(int sockfd) {
     char buffer[buffer_size];
     int total_bytes_received = 0;
@@ -77,7 +48,7 @@ int receive_from_server(int sockfd) {
         bytes_received = recv(sockfd, buffer, sizeof(buffer), 0);
 
         if (bytes_received == 0) {
-            printf("Conexão encerrada pelo servidor.\n");
+            printf("Sessão encerrada.\n");
             exit(0);
         } else if (bytes_received < 0) {
             perror("recv error");
@@ -100,6 +71,51 @@ int receive_from_server(int sockfd) {
         }
     }
 
+}
+
+void send_file(int sockfd, char *filename) {
+    char buffer[buffer_size], loadpath[150];
+    memset(loadpath, '\0', sizeof(loadpath));
+    sprintf(loadpath, "%s/%s", filepath, filename);
+
+    printf("Carregando arquivo: '%s'\n", filename);
+
+    FILE *fp = fopen(loadpath, "rb");
+    if (fp == NULL) {
+        perror("Erro ao carregar arquivo");
+        exit(1);
+    }
+
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        perror("Erro ao percorrer arquivo");
+        fclose(fp);
+        exit(1);
+    }
+
+    long int filelength = ftell(fp);
+    if (filelength < 0) {
+        perror("Erro ao adquirir tamanho do arquivo");
+        fclose(fp);
+        exit(1);
+    }
+
+    send_to_server(sockfd, "%ld", filelength);
+
+    size_t bytes_read;
+    fseek(fp, 0, SEEK_SET);
+
+    receive_from_server(sockfd);
+
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
+        if (send(sockfd, buffer, bytes_read, 0) == -1) {
+            perror("Erro ao enviar o arquivo.");
+            fclose(fp);
+            exit(1);
+        }
+    }
+    
+    fclose(fp);
+    receive_from_server(sockfd);
 }
 
 void receive_file(int sockfd, char *filename) {
@@ -225,17 +241,19 @@ int main(int argc, char *argv[]) {
             char filename[100];
             memset(filename, '\0', sizeof(filename));
             fgets(filename, sizeof(filename), stdin);
+            filename[strcspn(filename, "\n")] = 0;
 
             send_to_server(sockfd, "%s", filename);     // Send the music name
             send_file(sockfd, filename);
 
-        } else if (op == 3) { // '3' para música // Se o servidor envia a música, receba o arquivo 
+        } else if (op == 3) { // '3' para música // Se o servidor envia a música, receba o arquivo
             char filename[100];
             memset(filename, 0, sizeof(filename));
             sprintf(filename, "./musicas_recebidas/%s.mp3", "nome_da_musica");
             receive_file(sockfd, filename);
         }else {
             memset(message_to_server, '\0', sizeof(message_to_server));
+
             fgets(message_to_server, sizeof(message_to_server), stdin);
             send_to_server(sockfd, "%s", message_to_server);
         }
