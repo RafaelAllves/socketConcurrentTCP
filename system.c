@@ -529,6 +529,10 @@ void send_file(struct Conn * conn) {
     long total_size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
+    // Envie o tamanho do arquivo primeiro
+    sendto(conn->connfd, &total_size, sizeof(total_size), 0, (struct sockaddr *)&conn->client_address, conn->address_len);
+
+
     printf("total_size: %ld\n", total_size);
 
     char buffer[1024];
