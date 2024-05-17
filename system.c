@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <netinet/in.h>
 
 const int buffer_size = 2048;
 const char DB_NAME[] = "dev.sqlite3";
@@ -499,7 +500,67 @@ void send_file(struct Conn * conn) {
         return;
     }
 
-    /* TODO music send by udp */
+    // Verifique se conn->connfd é um descritor de socket válido
+    if (conn->connfd < 0) {
+        printf("conn->connfd é inválido: %d\n", conn->connfd);
+        return;
+    }
+
+    // Verifique se conn->client_address e conn->address_len estão corretamente definidos
+    if (conn->address_len != sizeof(conn->client_address)) {
+        printf("conn->address_len é inválido: %d\n", conn->address_len);
+        return;
+    }
+
+
+
+    // FILE *fp = fopen(musics.musics->filename, "rb");
+    send_to_client(conn, "\nMusica encontrada! \ufeff\ufeff\ufeff\n");
+    FILE *fp = fopen("./musicas/1.mp3", "rb");
+    
+    if (fp == NULL) {
+        perror("Erro ao abrir o arquivo");
+        send_to_client(conn, "\nErro ao abrir o arquivo!\n\n");
+        return;
+    }
+    
+    // Obtenha o tamanho total do arquivo
+    fseek(fp, 0, SEEK_END);
+    long total_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    printf("total_size: %ld\n", total_size);
+
+    char buffer[1024];
+    int bytes_read;
+    long bytes_sent = 0;
+    // while ((bytes_read = fread(buffer, sizeof(char), 1024, fp)) > 0) {
+    //     if (sendto(conn->connfd, buffer, bytes_read, 0, (struct sockaddr *)&conn->client_address, conn->address_len) == -1) {
+    //         perror("Erro ao enviar o arquivo!\n\n");
+    //         send_to_client(conn, "\nErro ao enviar o arquivo!\n\n");
+    //         fclose(fp);
+    //         return;
+    //     }
+    //     // printf("bytes_send: %d", bytes_read);
+    // }
+    while (bytes_sent < total_size) {
+        bytes_read = fread(buffer, sizeof(char), 1024, fp);
+        if (sendto(conn->connfd, buffer, bytes_read, 0, (struct sockaddr *)&conn->client_address, conn->address_len) == -1) {
+            perror("Erro ao enviar o arquivo!\n\n");
+            send_to_client(conn, "\nErro ao enviar o arquivo!\n\n");
+            fclose(fp);
+            return;
+        }
+        bytes_sent += bytes_read;
+        // printf("bytes_sent: %ld\n", bytes_sent);
+        // printf("bytes_sent < total_size: %d\n", bytes_sent < total_size);
+    }
+
+    printf("bytes_sent: %ld\n", bytes_sent);
+
+
+    fclose(fp);
+    send_to_client(conn, "\nArquivo enviado com sucesso!\n\n");
 
     
     screen_pause(conn);
@@ -604,9 +665,10 @@ int call_menu_input(struct Conn * conn) {
 }
 
 void serve_client(int admin_mode, struct sockaddr * client_address, socklen_t * address_len, int connfd) {
+
     struct Conn conn;
     conn.client_address = client_address;
-    conn.address_len = address_len;
+    conn.address_len = sizeof(client_address);
     conn.connfd = connfd;
     int exit = 0;
 
