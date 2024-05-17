@@ -516,7 +516,9 @@ void send_file(struct Conn * conn) {
 
     // FILE *fp = fopen(musics.musics->filename, "rb");
     send_to_client(conn, "\nMusica encontrada! \ufeff\ufeff\ufeff\n");
-    FILE *fp = fopen("./musicas/1.mp3", "rb");
+    char filename[50];
+    sprintf(filename, "./musicas/%d.mp3", searchId);
+    FILE *fp = fopen(filename, "rb");
     
     if (fp == NULL) {
         perror("Erro ao abrir o arquivo");
