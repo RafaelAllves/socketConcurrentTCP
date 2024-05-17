@@ -516,6 +516,7 @@ void send_file(struct Conn * conn) {
 
     // FILE *fp = fopen(musics.musics->filename, "rb");
     send_to_client(conn, "\nMusica encontrada! \ufeff\ufeff\ufeff\n");
+
     char filename[50];
     sprintf(filename, "./musicas/%d.mp3", searchId);
     FILE *fp = fopen(filename, "rb");
@@ -533,6 +534,9 @@ void send_file(struct Conn * conn) {
 
     // Envie o tamanho do arquivo primeiro
     sendto(conn->connfd, &total_size, sizeof(total_size), 0, (struct sockaddr *)&conn->client_address, conn->address_len);
+    
+    // Envia music->title
+    sendto(conn->connfd, musics.musics->title, strlen(musics.musics->title), 0, (struct sockaddr *)&conn->client_address, conn->address_len);
 
 
     printf("total_size: %ld\n", total_size);
@@ -540,15 +544,7 @@ void send_file(struct Conn * conn) {
     char buffer[1024];
     int bytes_read;
     long bytes_sent = 0;
-    // while ((bytes_read = fread(buffer, sizeof(char), 1024, fp)) > 0) {
-    //     if (sendto(conn->connfd, buffer, bytes_read, 0, (struct sockaddr *)&conn->client_address, conn->address_len) == -1) {
-    //         perror("Erro ao enviar o arquivo!\n\n");
-    //         send_to_client(conn, "\nErro ao enviar o arquivo!\n\n");
-    //         fclose(fp);
-    //         return;
-    //     }
-    //     // printf("bytes_send: %d", bytes_read);
-    // }
+
     while (bytes_sent < total_size) {
         bytes_read = fread(buffer, sizeof(char), 1024, fp);
         if (sendto(conn->connfd, buffer, bytes_read, 0, (struct sockaddr *)&conn->client_address, conn->address_len) == -1) {

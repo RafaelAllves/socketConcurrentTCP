@@ -147,7 +147,15 @@ void receive_music(int sockfd) {
     long total_size;
     recvfrom(sockfd, &total_size, sizeof(total_size), 0, NULL, NULL);
 
-    FILE *fp = fopen("./musicas_recebidas/received_music.mp3", "wb");
+    char filename[50];
+    recvfrom(sockfd, &filename, sizeof(filename), 0, NULL, NULL);
+
+    printf("Recebendo arquivo: %s\n", filename);
+
+    char filepath[100] = "./musicas_recebidas/";
+    strcat(filepath, filename);
+    strcat(filepath, ".mp3"); // Add the ".mp3" extension
+    FILE *fp = fopen(filepath, "wb");
     if (fp == NULL) {
         printf("\nErro ao abrir o arquivo!\n\n");
         return;
