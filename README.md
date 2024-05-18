@@ -62,7 +62,7 @@ To compile the clients, you can use the `gcc` compiler as follows:
 
 For normal users (read only):
 ```bash
-  gcc -o <executable_name>.exe client.c
+  gcc -o <executable_name>.exe client.c -lm
 ```
 
 For admin (read and write): 
@@ -73,7 +73,7 @@ Replace *<executable_name>* with the desired name of the executable.
 
 Example:
 ```bash
-  gcc -o client.exe client.c
+  gcc -o client.exe client.c -lm
 ```
 ```bash
   gcc -o admin.exe admin.c

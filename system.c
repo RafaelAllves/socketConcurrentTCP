@@ -9,6 +9,8 @@ const int buffer_size = 2048;
 const char DB_NAME[] = "dev.sqlite3";
 const char filepath[] = "./musics";
 
+#define UDP_PORT 3491
+
 /* Data types */
 
 struct Music {
@@ -73,6 +75,8 @@ void listen_for_client(struct Conn * conn, const char *format, ...) {
 
     va_end(args);
 }
+
+
 
 /* Interation with database */
 
@@ -240,7 +244,7 @@ void show_music(struct Conn * conn, struct Music *music) {
 /* Specified Functions */
 
 void receive_file(struct Conn * conn, char *filename) {
-    char buffer[buffer_size], savepath[150], totalBytesRaw[100];
+    char buffer[buffer_size], savepath[150], totalBytesRaw[150];
     memset(buffer, '\0', sizeof(buffer));
     memset(savepath, '\0', sizeof(savepath));
     memset(totalBytesRaw, '\0', sizeof(totalBytesRaw));
@@ -290,46 +294,137 @@ void receive_file(struct Conn * conn, char *filename) {
     return;
 }
 
-void send_music_to_client(const char *client_ip, int client_port, struct sockaddr_in client_address, const char *filepath) {
-    int udp_socket;
-    socklen_t client_address_len = sizeof(client_address);
-    char buffer[buffer_size];
+void send_music_to_client(struct Conn * conn, char *filename) {
+    
+    //const char *client_ip, int client_port, struct sockaddr_in client_address, const char *filepath
+    int udp_socket, res;
+    size_t bytes_read;
+    char buffer[buffer_size], data[buffer_size-4], loadpath[150];
+    long file_size;
     memset(buffer, '\0', sizeof(buffer));
+    memset(data, '\0', sizeof(data));
+    memset(loadpath, '\0', sizeof(loadpath));
     FILE *music_file;
 
     // Cria o socket UDP
     if ((udp_socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("Não foi possível criar o socket");
+        perror("Não foi possível criar o socket udp");
         exit(EXIT_FAILURE);
     }
 
-    // Configura o endereço do cliente
-    client_address.sin_family = AF_INET;
-    client_address.sin_addr.s_addr = inet_addr(client_ip);
-    client_address.sin_port = htons(client_port);
+    // Configura o endereço do servidor
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(UDP_PORT);
+
+    if (bind(udp_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("bind");
+        exit(EXIT_FAILURE);
+    }
+
+    // envia porta udp por tcp
+    send_to_client(conn, "%d", UDP_PORT);
+
+    struct sockaddr_in client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+
+    // recupera o ip do cliente
+    if (recvfrom(udp_socket, buffer, sizeof(buffer), 0, (struct sockaddr*)&client_addr, &client_addr_len) < 0) {
+        perror("recvfrom");
+        exit(EXIT_FAILURE);
+    }
 
     // Abre o arquivo de música
-    music_file = fopen(filepath, "rb");
-    if (music_file == NULL) {
+
+    sprintf(loadpath, "%s/%s", filepath, filename);
+
+    if ((music_file = fopen(loadpath, "rb")) == NULL) {
         perror("Não foi possível abrir o arquivo");
         exit(EXIT_FAILURE);
     }
 
     // Envia o tamanho do arquivo para o cliente
-    fseek(music_file, 0, SEEK_END);
-    long file_size = ftell(music_file);
-    fseek(music_file, 0, SEEK_SET);
-    sendto(udp_socket, &file_size, sizeof(long), 0, (struct sockaddr *) &client_address, client_address_len);
 
-    // Envia os dados do arquivo para o cliente
-    size_t bytes_read;
-    while ((bytes_read = fread(buffer, 1, buffer_size, music_file)) > 0) {
-        printf("Enviando %ld bytes\n", bytes_read);
-        sendto(udp_socket, buffer, bytes_read, 0, (struct sockaddr *) &client_address, client_address_len);
-        // usleep(10000);  // Adiciona um pequeno atraso para simular a transmissão real
+    if (fseek(music_file, 0, SEEK_END) != 0) {
+        perror("Erro ao percorrer arquivo");
+        fclose(music_file);
+        exit(EXIT_FAILURE);
     }
 
-    // Fecha o arquivo e o socket
+    if (file_size = ftell(music_file) < 0) {
+        perror("Erro ao adquirir tamanho do arquivo");
+        fclose(music_file);
+        exit(EXIT_FAILURE);
+    }
+
+    if (fseek(music_file, 0, SEEK_SET) != 0) {
+        perror("Erro ao percorrer arquivo");
+        fclose(music_file);
+        exit(EXIT_FAILURE);
+    }
+
+    if (sendto(udp_socket, &file_size, sizeof(file_size), 0, (struct sockaddr *) &client_addr, client_addr_len) == -1) {
+        perror("Erro ao enviar tamanho do arquivo");
+        fclose(music_file);
+        exit(EXIT_FAILURE);
+    }
+
+    // Envia o nome do arquivo
+    if (sendto(udp_socket, filename, sizeof(filename), 0, (struct sockaddr *) &client_addr, client_addr_len) == -1) {
+        perror("Erro ao enviar tamanho do arquivo");
+        fclose(music_file);
+        exit(EXIT_FAILURE);
+    }
+
+    // espera por resposta antes de iniciar envio
+    if ((res = recvfrom(udp_socket, &buffer, sizeof(buffer), 0, (struct sockaddr *) &client_addr, &client_addr_len)) <= 0) {
+        if (res == 0) {
+            printf("Sessão encerrada.\n");
+            exit(0);
+        } else if (res < 0) {
+            perror("recv error");
+            exit(1);
+        }
+    }
+
+    printf("%s", buffer);
+    
+    sleep(1);
+
+    // Envia os dados do arquivo para o cliente
+    int packet_number = 0;
+    
+    while ((bytes_read = fread(data, 1, sizeof(data), music_file)) > 0) {
+        //printf("Enviando %ld bytes\n", bytes_read);
+
+        // 4 primeiros digitos do buffer sao posicao do dado
+        if (sprintf(buffer, "%0*d", 4, packet_number) <= 0) {
+            perror("Erro ao formatar o buffer");
+            break;
+        }
+
+        // Adiciona dados do arquivo ao buffer
+        strncat(buffer, data, buffer_size);
+
+        if (sendto(udp_socket, buffer, bytes_read, 0, (struct sockaddr *) &client_addr, client_addr_len) == -1) {
+            perror("Erro ao enviar o arquivo.");
+            fclose(music_file);
+            exit(EXIT_FAILURE);
+        }
+
+        packet_number++;
+    }
+
+    sleep(3);
+
+    char eof = '\0';
+    if (sendto(udp_socket, &eof, sizeof eof, 0, (struct sockaddr *) &client_addr, client_addr_len) == -1) {
+        perror("Erro ao enviar o arquivo.");
+        fclose(music_file);
+        exit(EXIT_FAILURE);
+    }
+
     fclose(music_file);
     close(udp_socket);
 
@@ -549,34 +644,36 @@ void list_all(struct Conn * conn) {
     screen_pause(conn);
 }
 
-void get_by_id(struct Conn * conn_tcp, char *clientIp, int connfd, struct sockaddr_storage client_address) {
+void get_by_id(struct Conn * conn) {
     int searchId = -1;
     struct Musics musics;
-    db_fetch(conn_tcp, &musics);
+    db_fetch(conn, &musics);
 
     while (1) {
-        send_to_client(conn_tcp, "\nInsira o ID da musica a ser baixada: \ufeff\n");
-        listen_for_client(conn_tcp, " %d", &searchId);
+        send_to_client(conn, "\nInsira o ID da musica a ser baixada ou -1 para voltar: \ufeff\n");
+        listen_for_client(conn, " %d", &searchId);
 
         if (searchId >= 0 && searchId <= musics.n)
             break;
 
-        send_to_client(conn_tcp, "\nID invalido! Tente novamente.\n\n");
+        if (searchId == -1)
+            return;
+
+        send_to_client(conn, "\nID invalido! Tente novamente.\n\n");
     }
 
     while(musics.musics != NULL && musics.musics->id != searchId)
         musics.musics = musics.musics->next;
 
     if (musics.musics == NULL) {
-        send_to_client(conn_tcp, "\nMusica nao encontrada!\n\n");
+        send_to_client(conn, "\nMusica nao encontrada!\n\n");
         return;
     }
 
-    send_to_client(conn_tcp, "\nBaixando Musica!\ufeff\ufeff\ufeff\n");
-    //send_music_to_client(clientIp, connfd, (struct sockaddr_in)&client_address, "./musicas/1.mp3");
-
+    send_to_client(conn, "\nBaixando Musica!\ufeff\ufeff\ufeff\n");
+    send_music_to_client(conn, musics.musics->filename);
     
-    screen_pause(conn_tcp);
+    screen_pause(conn);
 }
 
 /* Server Initialization */
@@ -637,7 +734,7 @@ int call_menu_input_adm(struct Conn * conn) {
             list_all(conn);
             break;
         case 8:
-            //get_by_id(conn);
+            get_by_id(conn);
             break;
         case 9:
             return 1;
@@ -668,7 +765,7 @@ int call_menu_input(struct Conn * conn) {
             list_all(conn);
             break;
         case 6:
-            //get_by_id(conn);
+            get_by_id(conn);
             break;
         case 7:
             return 1;

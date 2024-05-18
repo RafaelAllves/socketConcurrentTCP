@@ -99,9 +99,6 @@ int main(void) {
 
     // tcp socket
     int server_socket = bind_socket(SOCK_STREAM, SO_REUSEADDR, &option);
-    
-    // udp socket
-    // int server_socket = bind_socket(SOCK_DGRAM, SOCK_DGRAM, &option);
 
     setup_sigchld_handling();
 
