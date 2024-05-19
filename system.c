@@ -299,7 +299,8 @@ void send_music_to_client(struct Conn * conn, char *filename) {
     //const char *client_ip, int client_port, struct sockaddr_in client_address, const char *filepath
     int udp_socket;
     size_t bytes_read;
-    char buffer[(sizeof(int) * 6) + (sizeof(char) * (buffer_size-6))], data[sizeof(char) * (buffer_size-6)], loadpath[150];
+    char buffer[10240], loadpath[150];
+    unsigned char data[10230];
     long file_size;
     memset(buffer, '\0', sizeof(buffer));
     memset(data, '\0', sizeof(data));
@@ -341,7 +342,7 @@ void send_music_to_client(struct Conn * conn, char *filename) {
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(UDP_PORT);     //talvez aqui devia ser variavel (fazer =0)
+    server_addr.sin_port = htons(UDP_PORT);
 
     if (recv(conn->connfd, buffer, sizeof(buffer), 0) <= 0) {
         perror("recv error");
@@ -360,10 +361,6 @@ void send_music_to_client(struct Conn * conn, char *filename) {
         fclose(music_file);
         exit(EXIT_FAILURE);
     }
-    
-    // char server_ip_string[INET_ADDRSTRLEN];
-    // strcpy(server_ip_string, inet_ntoa(server_addr.sin_addr));
-    // printf("My server IP: %s\n", server_ip_string);
 
     if (bind(udp_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         perror("bind");
@@ -383,10 +380,6 @@ void send_music_to_client(struct Conn * conn, char *filename) {
         exit(EXIT_FAILURE);
     }
 
-    // char client_ip_string[INET_ADDRSTRLEN];
-    // strcpy(client_ip_string, inet_ntoa(client_addr.sin_addr));
-    // printf("My client IP: %s\n", client_ip_string);
-
     printf("%s", buffer);
     
     sleep(1);
@@ -395,12 +388,13 @@ void send_music_to_client(struct Conn * conn, char *filename) {
     int packet_number = 0;
 
     int cycle = 0;
-    char pckt_n[sizeof(int) * 6];
+    char pckt_n[10];
     memset(pckt_n, '\0', sizeof(pckt_n));
-    
     memset(buffer, '\0', sizeof(buffer));
-    while ((bytes_read = fread(data, 1, sizeof(char) * (buffer_size-6), music_file)) > 0) {
-        memset(pckt_n, '\0', sizeof(pckt_n));
+    memset(data, '\0', sizeof(data));
+    
+    while ((bytes_read = fread(data, 1, sizeof(data), music_file)) > 0) {
+        
 
         // 5 primeiros digitos do buffer sao posicao do dado
         if (bytes_read <= 0) {
@@ -410,7 +404,7 @@ void send_music_to_client(struct Conn * conn, char *filename) {
             exit(EXIT_FAILURE);
         }
 
-        if (sprintf(pckt_n, "%0*d", 5, packet_number) <= 0) {
+        if (sprintf(buffer, "%0*d", 10, packet_number) <= 0) {
             perror("Erro ao formatar o buffer");
             break;
         }
@@ -420,19 +414,19 @@ void send_music_to_client(struct Conn * conn, char *filename) {
         // }
         // printf("\n");
         //printf("buffer 1: %s\n", buffer);
-        //printf("data: %s\n", pckt_n);
+        //printf("data: %02hhx\n", ((unsigned int) data));
 
-        strncat(buffer, pckt_n, sizeof(int) * 6);
-        strncat(buffer, data, sizeof(char) * (buffer_size-6));
+        //strncat(buffer, pckt_n, sizeof(pckt_n));
+        strncat(buffer, data, sizeof(data));
 
-        // for (int i = 0; i < buffer_size; i++) {
+        // for (long i = 0; i < sizeof(buffer); i++) {
         //     printf("%c", buffer[i]);
         // }
         // printf("\n");
-        printf("buffer 2: %s\n", buffer);
+        // printf("buffer 2: %s\n", buffer);
         
 
-        if (sendto(udp_socket, buffer, buffer_size, 0, (struct sockaddr *) &client_addr, client_addr_len) <= 0) {
+        if (sendto(udp_socket, buffer, sizeof(buffer), 0, (struct sockaddr *) &client_addr, client_addr_len) <= 0) {
             perror("Erro ao enviar o arquivo.");
             fclose(music_file);
             close(udp_socket);
@@ -449,6 +443,7 @@ void send_music_to_client(struct Conn * conn, char *filename) {
         packet_number++;
         memset(data, '\0', sizeof(data));
         memset(buffer, '\0', sizeof(buffer));
+        memset(pckt_n, '\0', sizeof(pckt_n));
     }
 
     printf("Pacotes enviados %d\n", packet_number);

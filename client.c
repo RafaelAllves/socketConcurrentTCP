@@ -123,7 +123,7 @@ void upload_file(int sockfd, char *filename) {
 }
 
 void receive_file(int sockfd, char * server_ip) {
-    char buffer[(sizeof(int) * 6) + (sizeof(char) * (buffer_size-6))], savepath[150], filename[100];
+    char buffer[10240], savepath[150], filename[100], raw_pos[10], data[10230];
     memset(buffer, '\0', sizeof(buffer));
     memset(savepath, '\0', sizeof(savepath));
     memset(filename, '\0', sizeof(filename));
@@ -163,7 +163,7 @@ void receive_file(int sockfd, char * server_ip) {
     }
 
     // Aloca memória para receber o arquivo
-    int num_chunks = ceil((double)file_size / (double)buffer_size);
+    int num_chunks = ceil((double)file_size / (double)sizeof(data));
 
     printf("Recebendo arquivo: %s em %d partes\n", filename, num_chunks);
     
@@ -175,7 +175,7 @@ void receive_file(int sockfd, char * server_ip) {
     }
 
     for (int i = 0; i < num_chunks; i++) {
-        chunks[i] = (char*)malloc(sizeof(char) * (buffer_size-6));
+        chunks[i] = (char*)malloc(sizeof(char));
         if (chunks[i] == NULL) {
             perror("Chunks position memory allocation failed");
             break;
@@ -227,16 +227,6 @@ void receive_file(int sockfd, char * server_ip) {
         exit(EXIT_FAILURE);
     }
 
-    //remover
-    // char client_ip_string[INET_ADDRSTRLEN];
-    // strcpy(client_ip_string, inet_ntoa(client_addr.sin_addr));
-    // printf("My client IP: %s\n", client_ip_string);
-
-    // char server_ip_string[INET_ADDRSTRLEN];
-    // strcpy(server_ip_string, inet_ntoa(server_addr.sin_addr));
-    // printf("My server IP: %s\n", server_ip_string);
-    // //-------
-
     socklen_t server_address_len = sizeof(server_addr);
     char sync_msg[] = "Iniciando transferencia...\ufeff\n";
 
@@ -250,16 +240,14 @@ void receive_file(int sockfd, char * server_ip) {
         exit(EXIT_FAILURE);
     }
 
-    // Recebe os dados do socket e escreve no arquivo
-    char raw_pos[6];
-    char data[sizeof(char) * (buffer_size-6)];
+    // Recebe os dados do socket e escreve no arquivo    
 
     while (1) {
         memset(buffer, '\0', sizeof(buffer));
         memset(raw_pos, '\0', sizeof(raw_pos));
         memset(data, '\0', sizeof(data));
 
-        int bytes_received = recvfrom(udp_socket, &buffer, sizeof(buffer), 0, (struct sockaddr *) &server_addr, &server_address_len);
+        ssize_t bytes_received = recvfrom(udp_socket, &buffer, sizeof(buffer), 0, (struct sockaddr *) &server_addr, &server_address_len);
         
         // Sinal do servidor para parar de esperar por novos dados
         if (buffer[0] == '\0') {
@@ -267,20 +255,32 @@ void receive_file(int sockfd, char * server_ip) {
             break;
         }
 
-        //printf("Buffer recebido: %s\n", buffer);
+        printf("Buffer recebido: ");
+        for (long i = 0; i < sizeof(buffer); i++) {
+            printf("%x", buffer[i]);
+        }
 
-        strncpy(raw_pos, buffer, 5);
+        printf("\n");
+
+        memcpy(raw_pos, buffer, 10*sizeof(int));
+        raw_pos[10] = '\0';
         int pos = atoi(raw_pos);
 
-        //printf("Pos recebido: %s ou %d\n", raw_pos, pos);
+        printf("Pos recebido: %s ou %d\n", raw_pos, pos);
+        //printf("Bytes recebidos: %ld\n", bytes_received);
 
-        strncpy(data, buffer + 5, buffer_size-5);
+        memcpy(data, buffer + 10, sizeof(data));
 
         //strcat(raw_pos, buffer + buffer_size-6);
 
 
         
-        //printf("Data: %s\n", data);
+        printf("Data: %ld %ld\n", sizeof(data), strlen(data));
+        for (long i = 0; i < sizeof(data); i++) {
+            printf("%x", data[i]);
+        }
+
+        printf("\n");
 
         // debug
         //printf("Chunk recebido: %d com %d bytes\n", pos, bytes_received);
@@ -299,7 +299,14 @@ void receive_file(int sockfd, char * server_ip) {
         }
 
         if (pos >= 0 && pos < num_chunks) {
-            strcat(chunks[pos], data);
+            free(chunks[pos]);
+            chunks[pos] = (char*)malloc(sizeof(char) * sizeof(data));
+            if (chunks[pos] == NULL) {
+                perror("Chunks position memory allocation failed");
+                break;
+            }
+            memset(chunks[pos], '\0', sizeof(chunks[pos]));
+            memcpy(chunks[pos], data, sizeof(data));
         } else {
             printf("Pacote %d invalido\n", pos);
         }
@@ -307,10 +314,13 @@ void receive_file(int sockfd, char * server_ip) {
         //printf("Chunk %d: \n%s\n", pos, chunks[pos]);
     }
 
-    int aux = 0;
-    int buff_len = 0;
-    for (int i = 0; i < num_chunks; i++) {
+    
+
+    long aux = 0;
+    long buff_len = 0;
+    for (long i = 0; i < num_chunks; i++) {
         buff_len = strlen(chunks[i]);
+        printf("Pacote %ld: \n%ld\n", i, buff_len);
 
         // for (int j = 0; j < buff_len; j++) {
         //     printf("%c", chunks[i][j]);
@@ -319,9 +329,9 @@ void receive_file(int sockfd, char * server_ip) {
 
         if (buff_len > 0) {
             fwrite(chunks[i], 1, buff_len, file);
-            printf("Pacote %d: escrito como %s\n", i, chunks[i]);
+            //printf("Pacote %d: escrito como %s\n", i, chunks[i]);
         } else {
-            printf("Pacote %d vazio\n", i);
+            printf("Pacote %ld vazio\n", i);
             aux++;
         }
     }
@@ -349,7 +359,7 @@ void receive_file(int sockfd, char * server_ip) {
     }    
 
     if (final_size != file_size)
-        printf("Arquivo corrompido. %d pacotes vazios\n", aux);
+        printf("Arquivo corrompido %ld/%ld. %ld pacotes vazios\n", final_size, file_size, aux);
     else
         printf("O arquivo foi recebido com sucesso.\n");
 
