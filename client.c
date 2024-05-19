@@ -123,71 +123,37 @@ void upload_file(int sockfd, char *filename) {
 }
 
 void receive_file(int sockfd, char * server_ip) {
-    char buffer[buffer_size], savepath[150], filename[100], raw_port[100];
+    char buffer[(sizeof(int) * 6) + (sizeof(char) * (buffer_size-6))], savepath[150], filename[100];
     memset(buffer, '\0', sizeof(buffer));
     memset(savepath, '\0', sizeof(savepath));
     memset(filename, '\0', sizeof(filename));
-    memset(raw_port, '\0', sizeof(raw_port));
-    int port, res, udp_socket;
+    int port, udp_socket;
     long file_size;
     FILE *file;
 
-    // inicializar socket e receber porta udp
-    if ((res = recv(sockfd, raw_port, sizeof(raw_port), 0)) <= 0) {
-        if (res == 0) {
-            printf("Sessão encerrada.\n");
-            exit(0);
-        } else if (res < 0) {
-            perror("recv error");
-            exit(1);
-        }
-    }
+    send_to_server(sockfd, "bytes serão transferidos");
 
-    port = strtol(raw_port, NULL, 10);
-
-    if ((udp_socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("Erro ao criar o socket udp");
+    // recebe porta udp, tamanho do arquivo e seu nome por tcp
+    if (recv(sockfd, buffer, sizeof(buffer), 0) <= 0) {
+        perror("recv error");
         exit(EXIT_FAILURE);
     }
 
-    struct sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    inet_pton(AF_INET, server_ip, &server_addr.sin_addr);
+    char *token = strtok(buffer, "|");
+    if (token) {
+        port = atoi(token);
 
-    // envia endereco ao servidor
-    if (sendto(udp_socket, '\0', sizeof(char), 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Erro ao estabelecer conexao UDP");
-        close(udp_socket);
-        exit(EXIT_FAILURE);
-    }
+        token = strtok(NULL, "|");
+        if (token) {
+            file_size = atol(token);
 
-    // Variáveis para armazenar o endereço do cliente
-    struct sockaddr_storage client_address;
-    socklen_t client_address_len = sizeof(client_address);
-
-    // Recebe o tamanho do arquivo
-    if ((res = recvfrom(udp_socket, &file_size, sizeof(file_size), 0, (struct sockaddr *) &client_address, &client_address_len)) <= 0) {
-        if (res == 0) {
-            printf("Sessão encerrada.\n");
-            exit(0);
-        } else if (res < 0) {
-            perror("recv error");
-            exit(1);
+            token = strtok(NULL, "|");
+            if (token) {
+                strcpy(filename, token);
+            }
         }
     }
 
-    // Recebe nome do arquivo
-    if ((res = recvfrom(udp_socket, &filename, sizeof(filename), 0, (struct sockaddr *) &client_address, &client_address_len)) <= 0) {
-        if (res == 0) {
-            printf("Sessão encerrada.\n");
-            exit(0);
-        } else if (res < 0) {
-            perror("recv error");
-            exit(1);
-        }
-    }
-    
     // Abre o arquivo
     sprintf(savepath, "%s/%s", filepath, filename);
     
@@ -197,84 +163,202 @@ void receive_file(int sockfd, char * server_ip) {
     }
 
     // Aloca memória para receber o arquivo
-    int num_chunks = ceil(file_size / (double)buffer_size);
+    int num_chunks = ceil((double)file_size / (double)buffer_size);
 
-    printf("Recebendo arquivo: %s com %ld bytes\n", filename, file_size);
+    printf("Recebendo arquivo: %s em %d partes\n", filename, num_chunks);
     
     char** chunks = (char**)malloc(sizeof(char*) * num_chunks);
     if (chunks == NULL) {
         perror("Chunks memory allocation failed");
+        fclose(file);
         exit(EXIT_FAILURE);
     }
 
     for (int i = 0; i < num_chunks; i++) {
-        chunks[i] = (char*)malloc(sizeof(char) * buffer_size-4);
+        chunks[i] = (char*)malloc(sizeof(char) * (buffer_size-6));
         if (chunks[i] == NULL) {
             perror("Chunks position memory allocation failed");
             break;
         }
-        chunks[i][0] = '\0';
+        memset(chunks[i], '\0', sizeof(chunks[i]));
     }
 
-    // Sinaliza servidor que socket esta pronto para receber dados
-    char *sync_msg = "Iniciando transferencia...\ufeff\n";
 
-    if (sendto(udp_socket, sync_msg, sizeof(sync_msg), 0, (struct sockaddr *) &client_address, client_address_len) == -1) {
+    // Cria o socket udp do cliente
+    struct sockaddr_in client_addr;
+
+    if ((udp_socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("Erro ao criar o socket udp");
+        fclose(file);
+        for (int i = 0; i < num_chunks; i++)
+            free(chunks[i]);
+        free(chunks);
+        exit(EXIT_FAILURE);
+    }
+
+    client_addr.sin_family = AF_INET;   // Bind socket allows server to identify client's source address
+    client_addr.sin_port = 0;       // permite que o SO escolha a porta
+    client_addr.sin_addr.s_addr = INADDR_ANY;
+
+    if (bind(udp_socket, (struct sockaddr*)&client_addr, sizeof(client_addr)) < 0) {
+        perror("bind failed");
+        fclose(file);
+        close(udp_socket);
+        for (int i = 0; i < num_chunks; i++)
+            free(chunks[i]);
+        free(chunks);
+        exit(EXIT_FAILURE);
+    }
+
+    // Inicializa endereco udp do servidor
+    struct sockaddr_in server_addr;
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    inet_pton(AF_INET, server_ip, &server_addr.sin_addr);
+    
+    if (server_addr.sin_addr.s_addr == INADDR_NONE) {
+        perror("Invalid server IP address");
+        fclose(file);
+        close(udp_socket);
+        for (int i = 0; i < num_chunks; i++)
+            free(chunks[i]);
+        free(chunks);
+        exit(EXIT_FAILURE);
+    }
+
+    //remover
+    // char client_ip_string[INET_ADDRSTRLEN];
+    // strcpy(client_ip_string, inet_ntoa(client_addr.sin_addr));
+    // printf("My client IP: %s\n", client_ip_string);
+
+    // char server_ip_string[INET_ADDRSTRLEN];
+    // strcpy(server_ip_string, inet_ntoa(server_addr.sin_addr));
+    // printf("My server IP: %s\n", server_ip_string);
+    // //-------
+
+    socklen_t server_address_len = sizeof(server_addr);
+    char sync_msg[] = "Iniciando transferencia...\ufeff\n";
+
+    if (sendto(udp_socket, sync_msg, sizeof(sync_msg), 0, (struct sockaddr *) &server_addr, server_address_len) == -1) {
         perror("Erro ao sincronizar inicio da transferência");
+        fclose(file);
+        close(udp_socket);
+        for (int i = 0; i < num_chunks; i++)
+            free(chunks[i]);
+        free(chunks);
         exit(EXIT_FAILURE);
     }
 
     // Recebe os dados do socket e escreve no arquivo
-    long total_bytes_received = 0;
-    char raw_pos[5];
+    char raw_pos[6];
+    char data[sizeof(char) * (buffer_size-6)];
 
     while (1) {
         memset(buffer, '\0', sizeof(buffer));
+        memset(raw_pos, '\0', sizeof(raw_pos));
+        memset(data, '\0', sizeof(data));
 
-        char bytes_received = recvfrom(udp_socket, buffer, buffer_size, 0, (struct sockaddr *) &client_address, &client_address_len);
+        int bytes_received = recvfrom(udp_socket, &buffer, sizeof(buffer), 0, (struct sockaddr *) &server_addr, &server_address_len);
         
         // Sinal do servidor para parar de esperar por novos dados
         if (buffer[0] == '\0') {
-            printf("Transferência completa.\n");
+            printf("Transferência concluida.\n");
             break;
         }
 
-        strncpy(raw_pos, buffer, 4);
-        raw_pos[4] = '\0';
+        //printf("Buffer recebido: %s\n", buffer);
+
+        strncpy(raw_pos, buffer, 5);
         int pos = atoi(raw_pos);
 
+        //printf("Pos recebido: %s ou %d\n", raw_pos, pos);
+
+        strncpy(data, buffer + 5, buffer_size-5);
+
+        //strcat(raw_pos, buffer + buffer_size-6);
+
+
+        
+        //printf("Data: %s\n", data);
+
         // debug
-        printf("Chunk recebido: %d\n", pos);
+        //printf("Chunk recebido: %d com %d bytes\n", pos, bytes_received);
+        // printf("buffer: %s\n", buffer);
 
         if (bytes_received < 0) {
-            perror("Erro ao receber dados do socket");
+            perror("Erro ao receber dados");
+            close(udp_socket);
+            fclose(file);
+            for (int i = 0; i < num_chunks; i++)
+                free(chunks[i]);
+            free(chunks);
             exit(EXIT_FAILURE);
-        } else if (bytes_received == 0) {
-            printf("Transferência encerrada prematuramente.\n");
-            break;
         } else if (bytes_received < buffer_size && pos != num_chunks-1) {
             printf("Pacote numero %d incompleto\n", pos);
         }
 
-        strcpy(chunks[pos], buffer + 4);
+        if (pos >= 0 && pos < num_chunks) {
+            strcat(chunks[pos], data);
+        } else {
+            printf("Pacote %d invalido\n", pos);
+        }
 
-        total_bytes_received += bytes_received;
+        //printf("Chunk %d: \n%s\n", pos, chunks[pos]);
     }
 
-    printf("Foram recebidos %ld bytes\n", total_bytes_received);
+    int aux = 0;
+    int buff_len = 0;
+    for (int i = 0; i < num_chunks; i++) {
+        buff_len = strlen(chunks[i]);
 
-    fwrite(chunks, 1, sizeof chunks, file);
+        // for (int j = 0; j < buff_len; j++) {
+        //     printf("%c", chunks[i][j]);
+        // }
+        // printf("\n");
 
-    if (total_bytes_received != file_size)
-        printf("Transferência incompleta. O arquivo foi corrompido.\n");
-    else
-        printf("Transferência concluída com sucesso.\n");
-
-    for (int i = 0; i < num_chunks; i++)
-        free(chunks[i]);
-    free(chunks);
+        if (buff_len > 0) {
+            fwrite(chunks[i], 1, buff_len, file);
+            printf("Pacote %d: escrito como %s\n", i, chunks[i]);
+        } else {
+            printf("Pacote %d vazio\n", i);
+            aux++;
+        }
+    }
 
     fclose(file);
+
+
+    if ((file = fopen(savepath, "rb")) == NULL) {
+        perror("Não foi possível abrir o arquivo");
+        exit(EXIT_FAILURE);
+    }
+
+    if (fseek(file, 0, SEEK_END) != 0) {
+        perror("Erro ao percorrer arquivo");
+        fclose(file);
+        exit(EXIT_FAILURE);
+    }
+
+    long final_size;
+
+    if ((final_size = ftell(file)) < 0) {
+        perror("Erro ao adquirir tamanho do arquivo");
+        fclose(file);
+        exit(EXIT_FAILURE);
+    }    
+
+    if (final_size != file_size)
+        printf("Arquivo corrompido. %d pacotes vazios\n", aux);
+    else
+        printf("O arquivo foi recebido com sucesso.\n");
+
+    // for (int j = 0; j < num_chunks; j++)
+    //     free(chunks[j]);
+
+    free(chunks);
+    fclose(file);
+    close(udp_socket);
 }
 
 
@@ -289,7 +373,7 @@ int connect_to_server(char * server_addr, int sock_type, int opt_name) {
 
     if ((gai_rv = getaddrinfo(server_addr, PORT, &addr_init, &server_info)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(gai_rv));
-        return 1;
+        exit(EXIT_FAILURE);
     }
 
     // loop through all the results and connect to the first we can
@@ -313,12 +397,8 @@ int connect_to_server(char * server_addr, int sock_type, int opt_name) {
 
     if (curr_server_info == NULL)  {
         fprintf(stderr, "server: failed to connect to host\n");
-        return 2;
+        exit(EXIT_FAILURE);
     }
-
-    // Show server's IP
-    // inet_ntop(curr_server_info->ai_family, get_in_addr((struct sockaddr *)curr_server_info->ai_addr), server_ip, sizeof server_ip);
-    // printf("client: conectado a %s\n", server_ip);
 
     freeaddrinfo(server_info);
 
@@ -326,7 +406,7 @@ int connect_to_server(char * server_addr, int sock_type, int opt_name) {
 }
 
 int main(int argc, char *argv[]) {
-    char *server_alias = "localhost";
+    char *server_alias = "127.0.0.1";
 
     // Manage user input of where the server is
     if (argc > 2 && strcmp(argv[1], "-i") == 0)

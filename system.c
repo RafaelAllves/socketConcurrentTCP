@@ -9,7 +9,7 @@ const int buffer_size = 2048;
 const char DB_NAME[] = "dev.sqlite3";
 const char filepath[] = "./musics";
 
-#define UDP_PORT 3491
+#define UDP_PORT 3492
 
 /* Data types */
 
@@ -297,43 +297,16 @@ void receive_file(struct Conn * conn, char *filename) {
 void send_music_to_client(struct Conn * conn, char *filename) {
     
     //const char *client_ip, int client_port, struct sockaddr_in client_address, const char *filepath
-    int udp_socket, res;
+    int udp_socket;
     size_t bytes_read;
-    char buffer[buffer_size], data[buffer_size-4], loadpath[150];
+    char buffer[(sizeof(int) * 6) + (sizeof(char) * (buffer_size-6))], data[sizeof(char) * (buffer_size-6)], loadpath[150];
     long file_size;
     memset(buffer, '\0', sizeof(buffer));
     memset(data, '\0', sizeof(data));
     memset(loadpath, '\0', sizeof(loadpath));
     FILE *music_file;
 
-    // Cria o socket UDP
-    if ((udp_socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("Não foi possível criar o socket udp");
-        exit(EXIT_FAILURE);
-    }
-
-    // Configura o endereço do servidor
-    struct sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(UDP_PORT);
-
-    if (bind(udp_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("bind");
-        exit(EXIT_FAILURE);
-    }
-
-    // envia porta udp por tcp
-    send_to_client(conn, "%d", UDP_PORT);
-
-    struct sockaddr_in client_addr;
-    socklen_t client_addr_len = sizeof(client_addr);
-
-    // recupera o ip do cliente
-    if (recvfrom(udp_socket, buffer, sizeof(buffer), 0, (struct sockaddr*)&client_addr, &client_addr_len) < 0) {
-        perror("recvfrom");
-        exit(EXIT_FAILURE);
-    }
+    send_to_client(conn, "\nA transferência do arquivo sera iniciada\ufeff\ufeff\ufeff\n");
 
     // Abre o arquivo de música
 
@@ -344,7 +317,7 @@ void send_music_to_client(struct Conn * conn, char *filename) {
         exit(EXIT_FAILURE);
     }
 
-    // Envia o tamanho do arquivo para o cliente
+    // Adquire o tamanho do arquivo
 
     if (fseek(music_file, 0, SEEK_END) != 0) {
         perror("Erro ao percorrer arquivo");
@@ -352,7 +325,7 @@ void send_music_to_client(struct Conn * conn, char *filename) {
         exit(EXIT_FAILURE);
     }
 
-    if (file_size = ftell(music_file) < 0) {
+    if ((file_size = ftell(music_file)) < 0) {
         perror("Erro ao adquirir tamanho do arquivo");
         fclose(music_file);
         exit(EXIT_FAILURE);
@@ -364,29 +337,55 @@ void send_music_to_client(struct Conn * conn, char *filename) {
         exit(EXIT_FAILURE);
     }
 
-    if (sendto(udp_socket, &file_size, sizeof(file_size), 0, (struct sockaddr *) &client_addr, client_addr_len) == -1) {
-        perror("Erro ao enviar tamanho do arquivo");
+    // Configura o endereço do servidor
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(UDP_PORT);     //talvez aqui devia ser variavel (fazer =0)
+
+    if (recv(conn->connfd, buffer, sizeof(buffer), 0) <= 0) {
+        perror("recv error");
         fclose(music_file);
         exit(EXIT_FAILURE);
     }
 
-    // Envia o nome do arquivo
-    if (sendto(udp_socket, filename, sizeof(filename), 0, (struct sockaddr *) &client_addr, client_addr_len) == -1) {
-        perror("Erro ao enviar tamanho do arquivo");
+    printf("%ld %s\n", file_size, buffer);
+
+    // Envia porta udp, tamanho do arquivo e seu nome por tcp
+    send_to_client(conn, "%d|%ld|%s", UDP_PORT, file_size, filename);
+
+    // Cria o socket UDP
+    if ((udp_socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("Não foi possível criar o socket udp");
         fclose(music_file);
         exit(EXIT_FAILURE);
     }
+    
+    // char server_ip_string[INET_ADDRSTRLEN];
+    // strcpy(server_ip_string, inet_ntoa(server_addr.sin_addr));
+    // printf("My server IP: %s\n", server_ip_string);
 
-    // espera por resposta antes de iniciar envio
-    if ((res = recvfrom(udp_socket, &buffer, sizeof(buffer), 0, (struct sockaddr *) &client_addr, &client_addr_len)) <= 0) {
-        if (res == 0) {
-            printf("Sessão encerrada.\n");
-            exit(0);
-        } else if (res < 0) {
-            perror("recv error");
-            exit(1);
-        }
+    if (bind(udp_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("bind");
+        fclose(music_file);
+        close(udp_socket);
+        exit(EXIT_FAILURE);
     }
+
+    struct sockaddr_in client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+
+    // recupera ip do cliente
+    if (recvfrom(udp_socket, &buffer, sizeof(buffer), 0, (struct sockaddr *) &client_addr, &client_addr_len) <= 0) {
+        perror("recv error");
+        fclose(music_file);
+        close(udp_socket);
+        exit(EXIT_FAILURE);
+    }
+
+    // char client_ip_string[INET_ADDRSTRLEN];
+    // strcpy(client_ip_string, inet_ntoa(client_addr.sin_addr));
+    // printf("My client IP: %s\n", client_ip_string);
 
     printf("%s", buffer);
     
@@ -394,34 +393,73 @@ void send_music_to_client(struct Conn * conn, char *filename) {
 
     // Envia os dados do arquivo para o cliente
     int packet_number = 0;
-    
-    while ((bytes_read = fread(data, 1, sizeof(data), music_file)) > 0) {
-        //printf("Enviando %ld bytes\n", bytes_read);
 
-        // 4 primeiros digitos do buffer sao posicao do dado
-        if (sprintf(buffer, "%0*d", 4, packet_number) <= 0) {
+    int cycle = 0;
+    char pckt_n[sizeof(int) * 6];
+    memset(pckt_n, '\0', sizeof(pckt_n));
+    
+    memset(buffer, '\0', sizeof(buffer));
+    while ((bytes_read = fread(data, 1, sizeof(char) * (buffer_size-6), music_file)) > 0) {
+        memset(pckt_n, '\0', sizeof(pckt_n));
+
+        // 5 primeiros digitos do buffer sao posicao do dado
+        if (bytes_read <= 0) {
+            perror("Erro ao carregar parte do arquivo");
+            fclose(music_file);
+            close(udp_socket);
+            exit(EXIT_FAILURE);
+        }
+
+        if (sprintf(pckt_n, "%0*d", 5, packet_number) <= 0) {
             perror("Erro ao formatar o buffer");
             break;
         }
 
-        // Adiciona dados do arquivo ao buffer
-        strncat(buffer, data, buffer_size);
+        // for (int i = 0; i < 6; i++) {
+        //     printf("%c", pckt_n[i]);
+        // }
+        // printf("\n");
+        //printf("buffer 1: %s\n", buffer);
+        //printf("data: %s\n", pckt_n);
 
-        if (sendto(udp_socket, buffer, bytes_read, 0, (struct sockaddr *) &client_addr, client_addr_len) == -1) {
+        strncat(buffer, pckt_n, sizeof(int) * 6);
+        strncat(buffer, data, sizeof(char) * (buffer_size-6));
+
+        // for (int i = 0; i < buffer_size; i++) {
+        //     printf("%c", buffer[i]);
+        // }
+        // printf("\n");
+        printf("buffer 2: %s\n", buffer);
+        
+
+        if (sendto(udp_socket, buffer, buffer_size, 0, (struct sockaddr *) &client_addr, client_addr_len) <= 0) {
             perror("Erro ao enviar o arquivo.");
             fclose(music_file);
+            close(udp_socket);
             exit(EXIT_FAILURE);
         }
 
+        cycle++;
+        if (cycle % 100 == 0) {
+            //exit(0);
+            sleep(1);
+            printf("Enviando %ld bytes pacote %d\n", bytes_read, packet_number);
+        }
+
         packet_number++;
+        memset(data, '\0', sizeof(data));
+        memset(buffer, '\0', sizeof(buffer));
     }
 
-    sleep(3);
+    printf("Pacotes enviados %d\n", packet_number);
+
+    usleep(3);
 
     char eof = '\0';
-    if (sendto(udp_socket, &eof, sizeof eof, 0, (struct sockaddr *) &client_addr, client_addr_len) == -1) {
+    if (sendto(udp_socket, &eof, sizeof eof, 0, (struct sockaddr *) &client_addr, client_addr_len) <= 0) {
         perror("Erro ao enviar o arquivo.");
         fclose(music_file);
+        close(udp_socket);
         exit(EXIT_FAILURE);
     }
 
@@ -670,7 +708,6 @@ void get_by_id(struct Conn * conn) {
         return;
     }
 
-    send_to_client(conn, "\nBaixando Musica!\ufeff\ufeff\ufeff\n");
     send_music_to_client(conn, musics.musics->filename);
     
     screen_pause(conn);
