@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 
 const int buffer_size = 2048;
+const int udp_buffer_size = 64000;
 const char DB_NAME[] = "dev.sqlite3";
 const char filepath[] = "./musics";
 
@@ -76,7 +77,217 @@ void listen_for_client(struct Conn * conn, const char *format, ...) {
     va_end(args);
 }
 
+void receive_file(struct Conn * conn, char *filename) {
+    char buffer[buffer_size], savepath[150], totalBytesRaw[150];
+    memset(buffer, '\0', sizeof(buffer));
+    memset(savepath, '\0', sizeof(savepath));
+    memset(totalBytesRaw, '\0', sizeof(totalBytesRaw));
+    size_t bytes_received = 0;
+    FILE *fp;
 
+    sprintf(savepath, "%s/%s", filepath, filename);
+
+    if (recv(conn->connfd, totalBytesRaw, sizeof(totalBytesRaw), 0) == -1) {
+        perror("msg recv error");
+    }
+
+    long totalBytes = strtol(totalBytesRaw, NULL, 10);
+
+    printf("Recebendo arquivo: %s com %ld bytes\n", filename, totalBytes);
+
+    if((fp = fopen(savepath, "wb")) == NULL){
+        printf("Erro abrir arquivo");
+        return;
+    }
+
+    send_to_client(conn, "Iniciando transferencia...\ufeff\n");
+
+    while (bytes_received < totalBytes) {
+        int bytes_to_recv = (totalBytes - bytes_received < buffer_size) ? (totalBytes - bytes_received) : buffer_size;
+        int bytes_read = recv(conn->connfd, buffer, bytes_to_recv, 0);
+        if (bytes_read == -1) {
+            perror("recv file");
+            fclose(fp);
+            exit(1);
+        } else if (bytes_read == 0) {
+            // Connection closed by server
+            printf("Server closed connection\n");
+            fclose(fp);
+            exit(1);
+        }
+
+        bytes_received += bytes_read;
+        fwrite(buffer, 1, bytes_read, fp);
+    }
+
+    fclose(fp);
+
+    printf("Arquivo recebido com sucesso!\n");
+    send_to_client(conn, "\nArquivo recebido com sucesso!\ufeff\n");
+
+    return;
+}
+
+void send_music_to_client(struct Conn * conn, char *filename) {
+    char loadpath[150];
+    memset(loadpath, '\0', sizeof(loadpath));
+
+    // Abre o arquivo de música
+    FILE *music_file;
+
+    sprintf(loadpath, "%s/%s", filepath, filename);
+    if ((music_file = fopen(loadpath, "rb")) == NULL) {
+        perror("Não foi possível abrir o arquivo");
+        return;
+    }
+
+    // Adquire o tamanho do arquivo
+    long file_size;
+
+    if (fseek(music_file, 0, SEEK_END) != 0) {
+        perror("Erro ao percorrer arquivo");
+        fclose(music_file);
+        return;
+    }
+    if ((file_size = ftell(music_file)) < 0) {
+        perror("Erro ao adquirir tamanho do arquivo");
+        fclose(music_file);
+        return;
+    }
+    if (fseek(music_file, 0, SEEK_SET) != 0) {
+        perror("Erro ao percorrer arquivo");
+        fclose(music_file);
+        return;
+    }
+
+    if (file_size / udp_buffer_size > 256) {
+        send_to_client(conn, "\nArquivo muito grande. O tamanho maximo suportado é 16mb.\n");
+        fclose(music_file);
+        return;
+    }
+
+    send_to_client(conn, "\nA transferência do arquivo sera iniciada\ufeff\ufeff\ufeff\n");
+
+    // Configura o endereço do servidor
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(UDP_PORT);
+
+    // Envia porta udp, tamanho do arquivo e seu nome por tcp
+    char tcp_buffer[buffer_size];
+    memset(tcp_buffer, '\0', sizeof(tcp_buffer));
+
+    if (recv(conn->connfd, tcp_buffer, sizeof(tcp_buffer), 0) <= 0) {
+        perror("recv error");
+        fclose(music_file);
+        return;
+    }
+    printf("%ld %s\n", file_size, tcp_buffer);
+    
+    send_to_client(conn, "%d|%ld|%s", UDP_PORT, file_size, filename);
+
+    // Cria o socket UDP
+    int udp_socket;
+
+    if ((udp_socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("Não foi possível criar o socket udp");
+        fclose(music_file);
+        return;
+    }
+    if (bind(udp_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("bind");
+        fclose(music_file);
+        close(udp_socket);
+        return;
+    }
+
+    struct sockaddr_in client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+
+    // recupera ip do cliente
+    unsigned char buffer[udp_buffer_size];
+
+    if (recvfrom(udp_socket, &buffer, sizeof(buffer), 0, (struct sockaddr *) &client_addr, &client_addr_len) <= 0) {
+        perror("recv error");
+        fclose(music_file);
+        close(udp_socket);
+        return;
+    }
+    printf("%s", buffer);
+    sleep(1);       // delay pra cliente entrar em modo de escuta
+
+    // Envia os dados do arquivo para o cliente
+    int packet_number = 0;
+
+    size_t bytes_read;
+    //char pckt_n[10];
+    //memset(pckt_n, '\0', sizeof(pckt_n));
+    memset(buffer, '\0', sizeof(buffer));
+    
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer)-1, music_file)) > 0) {
+        
+        
+        // printf("Lido: %ld\n", (long int)buffer);
+        // for (long i = 0; i < sizeof(buffer)-1; i++) {
+        //     printf("%d", buffer[i]);
+        // }
+        // printf("\n");
+        
+        // ultimo byte do buffer é utilizado para ordenacao
+        buffer[sizeof(buffer)-1] = (unsigned char)packet_number;
+
+        printf("Enviado: %d\n", buffer[sizeof(buffer)-1]);
+        for (long i = 0; i < sizeof(buffer)-1; i++) {
+            printf("%d", buffer[i]);
+        }
+        printf("\n");
+
+        // 5 primeiros digitos do buffer sao posicao do dado
+        if (bytes_read <= 0) {
+            perror("Erro ao carregar parte do arquivo");
+            fclose(music_file);
+            close(udp_socket);
+            return;
+        }
+
+        if (sendto(udp_socket, buffer, bytes_read, 0, (struct sockaddr *) &client_addr, client_addr_len) <= 0) {
+            perror("Erro ao enviar o arquivo.");
+            fclose(music_file);
+            close(udp_socket);
+            return;
+        }
+
+        packet_number++;
+
+        // if (packet_number == 3){
+        //     break;
+        // }
+
+        if (packet_number % 100 == 0) {
+            // throtlling
+            sleep(1);
+            printf("Enviando %ld bytes pacote %d\n", bytes_read, packet_number);
+        }
+    }
+
+    printf("Pacotes enviados %d\n", packet_number);
+
+    usleep(3);
+
+    char eof = '\0';
+    if (sendto(udp_socket, &eof, sizeof eof, 0, (struct sockaddr *) &client_addr, client_addr_len) <= 0) {
+        perror("Erro ao finalizar envio.");
+        fclose(music_file);
+        close(udp_socket);
+        return;
+    }
+
+    fclose(music_file);
+    close(udp_socket);
+
+    printf("Arquivo enviado com sucesso.\n");
+}
 
 /* Interation with database */
 
@@ -242,227 +453,6 @@ void show_music(struct Conn * conn, struct Music *music) {
 }
 
 /* Specified Functions */
-
-void receive_file(struct Conn * conn, char *filename) {
-    char buffer[buffer_size], savepath[150], totalBytesRaw[150];
-    memset(buffer, '\0', sizeof(buffer));
-    memset(savepath, '\0', sizeof(savepath));
-    memset(totalBytesRaw, '\0', sizeof(totalBytesRaw));
-    size_t bytes_received = 0;
-    FILE *fp;
-
-    sprintf(savepath, "%s/%s", filepath, filename);
-
-    if (recv(conn->connfd, totalBytesRaw, sizeof(totalBytesRaw), 0) == -1) {
-        perror("msg recv error");
-    }
-
-    long totalBytes = strtol(totalBytesRaw, NULL, 10);
-
-    printf("Recebendo arquivo: %s com %ld bytes\n", filename, totalBytes);
-
-    if((fp = fopen(savepath, "wb")) == NULL){
-        printf("Erro abrir arquivo");
-        return;
-    }
-
-    send_to_client(conn, "Iniciando transferencia...\ufeff\n");
-
-    while (bytes_received < totalBytes) {
-        int bytes_to_recv = (totalBytes - bytes_received < buffer_size) ? (totalBytes - bytes_received) : buffer_size;
-        int bytes_read = recv(conn->connfd, buffer, bytes_to_recv, 0);
-        if (bytes_read == -1) {
-            perror("recv file");
-            fclose(fp);
-            exit(1);
-        } else if (bytes_read == 0) {
-            // Connection closed by server
-            printf("Server closed connection\n");
-            fclose(fp);
-            exit(1);
-        }
-
-        bytes_received += bytes_read;
-        fwrite(buffer, 1, bytes_read, fp);
-    }
-
-    fclose(fp);
-
-    printf("Arquivo recebido com sucesso!\n");
-    send_to_client(conn, "\nArquivo recebido com sucesso!\ufeff\n");
-
-    return;
-}
-
-void send_music_to_client(struct Conn * conn, char *filename) {
-    
-    //const char *client_ip, int client_port, struct sockaddr_in client_address, const char *filepath
-    int udp_socket;
-    size_t bytes_read;
-    char buffer[10240], loadpath[150];
-    unsigned char data[10230];
-    long file_size;
-    memset(buffer, '\0', sizeof(buffer));
-    memset(data, '\0', sizeof(data));
-    memset(loadpath, '\0', sizeof(loadpath));
-    FILE *music_file;
-
-    send_to_client(conn, "\nA transferência do arquivo sera iniciada\ufeff\ufeff\ufeff\n");
-
-    // Abre o arquivo de música
-
-    sprintf(loadpath, "%s/%s", filepath, filename);
-
-    if ((music_file = fopen(loadpath, "rb")) == NULL) {
-        perror("Não foi possível abrir o arquivo");
-        exit(EXIT_FAILURE);
-    }
-
-    // Adquire o tamanho do arquivo
-
-    if (fseek(music_file, 0, SEEK_END) != 0) {
-        perror("Erro ao percorrer arquivo");
-        fclose(music_file);
-        exit(EXIT_FAILURE);
-    }
-
-    if ((file_size = ftell(music_file)) < 0) {
-        perror("Erro ao adquirir tamanho do arquivo");
-        fclose(music_file);
-        exit(EXIT_FAILURE);
-    }
-
-    if (fseek(music_file, 0, SEEK_SET) != 0) {
-        perror("Erro ao percorrer arquivo");
-        fclose(music_file);
-        exit(EXIT_FAILURE);
-    }
-
-    // Configura o endereço do servidor
-    struct sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(UDP_PORT);
-
-    if (recv(conn->connfd, buffer, sizeof(buffer), 0) <= 0) {
-        perror("recv error");
-        fclose(music_file);
-        exit(EXIT_FAILURE);
-    }
-
-    printf("%ld %s\n", file_size, buffer);
-
-    // Envia porta udp, tamanho do arquivo e seu nome por tcp
-    send_to_client(conn, "%d|%ld|%s", UDP_PORT, file_size, filename);
-
-    // Cria o socket UDP
-    if ((udp_socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("Não foi possível criar o socket udp");
-        fclose(music_file);
-        exit(EXIT_FAILURE);
-    }
-
-    if (bind(udp_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("bind");
-        fclose(music_file);
-        close(udp_socket);
-        exit(EXIT_FAILURE);
-    }
-
-    struct sockaddr_in client_addr;
-    socklen_t client_addr_len = sizeof(client_addr);
-
-    // recupera ip do cliente
-    if (recvfrom(udp_socket, &buffer, sizeof(buffer), 0, (struct sockaddr *) &client_addr, &client_addr_len) <= 0) {
-        perror("recv error");
-        fclose(music_file);
-        close(udp_socket);
-        exit(EXIT_FAILURE);
-    }
-
-    printf("%s", buffer);
-    
-    sleep(1);
-
-    // Envia os dados do arquivo para o cliente
-    int packet_number = 0;
-
-    int cycle = 0;
-    char pckt_n[10];
-    memset(pckt_n, '\0', sizeof(pckt_n));
-    memset(buffer, '\0', sizeof(buffer));
-    memset(data, '\0', sizeof(data));
-    
-    while ((bytes_read = fread(data, 1, sizeof(data), music_file)) > 0) {
-        
-
-        // 5 primeiros digitos do buffer sao posicao do dado
-        if (bytes_read <= 0) {
-            perror("Erro ao carregar parte do arquivo");
-            fclose(music_file);
-            close(udp_socket);
-            exit(EXIT_FAILURE);
-        }
-
-        if (sprintf(buffer, "%0*d", 10, packet_number) <= 0) {
-            perror("Erro ao formatar o buffer");
-            break;
-        }
-
-        // for (int i = 0; i < 6; i++) {
-        //     printf("%c", pckt_n[i]);
-        // }
-        // printf("\n");
-        //printf("buffer 1: %s\n", buffer);
-        //printf("data: %02hhx\n", ((unsigned int) data));
-
-        //strncat(buffer, pckt_n, sizeof(pckt_n));
-        strncat(buffer, data, sizeof(data));
-
-        // for (long i = 0; i < sizeof(buffer); i++) {
-        //     printf("%c", buffer[i]);
-        // }
-        // printf("\n");
-        // printf("buffer 2: %s\n", buffer);
-        
-
-        if (sendto(udp_socket, buffer, sizeof(buffer), 0, (struct sockaddr *) &client_addr, client_addr_len) <= 0) {
-            perror("Erro ao enviar o arquivo.");
-            fclose(music_file);
-            close(udp_socket);
-            exit(EXIT_FAILURE);
-        }
-
-        cycle++;
-        if (cycle % 100 == 0) {
-            //exit(0);
-            sleep(1);
-            printf("Enviando %ld bytes pacote %d\n", bytes_read, packet_number);
-        }
-
-        packet_number++;
-        memset(data, '\0', sizeof(data));
-        memset(buffer, '\0', sizeof(buffer));
-        memset(pckt_n, '\0', sizeof(pckt_n));
-    }
-
-    printf("Pacotes enviados %d\n", packet_number);
-
-    usleep(3);
-
-    char eof = '\0';
-    if (sendto(udp_socket, &eof, sizeof eof, 0, (struct sockaddr *) &client_addr, client_addr_len) <= 0) {
-        perror("Erro ao enviar o arquivo.");
-        fclose(music_file);
-        close(udp_socket);
-        exit(EXIT_FAILURE);
-    }
-
-    fclose(music_file);
-    close(udp_socket);
-
-    printf("Arquivo enviado com sucesso.\n");
-}
 
 void add_song(struct Conn * conn) {
     char answer = '\0';
