@@ -10,7 +10,6 @@
 #include <arpa/inet.h>
 #include <stdarg.h>
 #include <unistd.h>
-#include <math.h>
 
 #define PORT "3490"     // Port for connecting to the server
 
@@ -139,6 +138,7 @@ void receive_file(int sockfd, char * server_ip) {
     char filename[100];
     long file_size;
     int port;
+    int num_chunks;
     memset(filename, '\0', sizeof(filename));
     
     char *token = strtok(tcp_buffer, "|");
@@ -151,9 +151,17 @@ void receive_file(int sockfd, char * server_ip) {
 
             token = strtok(NULL, "|");
             if (token) {
-                strcpy(filename, token);
+                num_chunks = atoi(token);
+
+                token = strtok(NULL, "|");
+                if (token) {
+                    strcpy(filename, token);
+                } else {
+                    perror("Erro ao receber nome do arquivo");
+                    exit(EXIT_FAILURE);
+                }
             } else {
-                perror("Erro ao receber nome do arquivo");
+                perror("Erro ao receber numero de partes do arquivo");
                 exit(EXIT_FAILURE);
             }
         } else {
@@ -177,7 +185,6 @@ void receive_file(int sockfd, char * server_ip) {
     }
 
     // Aloca memória para receber o arquivo
-    int num_chunks = ceil((double)file_size / (double)udp_buffer_size);
     printf("Recebendo arquivo: %s em %d parte(s)\n", filename, num_chunks);
     
     unsigned char** chunks = (unsigned char**)malloc(sizeof(unsigned char*) * num_chunks);
@@ -211,7 +218,7 @@ void receive_file(int sockfd, char * server_ip) {
         exit(EXIT_FAILURE);
     }
 
-    client_addr.sin_family = AF_INET;   // Bind socket allows server to identify client's source address
+    client_addr.sin_family = AF_INET;
     client_addr.sin_port = 0;       // permite que o SO escolha a porta
     client_addr.sin_addr.s_addr = INADDR_ANY;
 
@@ -270,12 +277,7 @@ void receive_file(int sockfd, char * server_ip) {
     while (1) {
         bytes_received = recvfrom(udp_socket, buffer, sizeof(buffer), 0, (struct sockaddr *) &server_addr, &server_address_len);
 
-        printf("Bytes recebidos %ld: ", bytes_received);
-        // printf("Buffer recebido %d:\n", buffer[sizeof(buffer)-1]);
-        // for (long i = 0; i < bytes_received; i++) {
-        //     printf("%d", buffer[i]);
-        // }
-        // printf("\n");
+        
 
         if ((bytes_received > 0 && bytes_received < udp_buffer_size)) {
             // recebe tamanho do ultimo bloco de dados
@@ -298,48 +300,26 @@ void receive_file(int sockfd, char * server_ip) {
             exit(EXIT_FAILURE);
         }
 
+        // adquire posicao do pacote
         int piece_n = buffer[sizeof(buffer)-1];
-        memcpy(chunks[piece_n], buffer, sizeof(buffer)-1);
 
-        //printf("Na memoria %d: ", piece_n);
-        // for (int i = 0; i < sizeof(unsigned char) * (udp_buffer_size-1); i++) {
-        //     printf("%d", chunks[piece_n][i]);
-        // }
-        // printf("\n");
+        printf("Foram recebidos %ld bytes em pacote %d/%d\n", bytes_received, piece_n, num_chunks);
+
+        // armazena pacote no espaço alocado para ele
+        memcpy(chunks[piece_n], buffer, sizeof(buffer)-1);
 
         memset(buffer, '\0', sizeof(buffer));
     }
 
-    int buff_len = 0;
-    printf("Bytes recebidos: %ld\n", last_bytes_received);
-
     for (int i = 0; i < num_chunks; i++) {
 
         if (i == num_chunks-1) {
+            // ultimo pacote
             fwrite(chunks[i], 1, last_bytes_received, file);
-
-            printf("Pacote %d: Course A\n", i);
-            for (int j = 0; j < last_bytes_received; j++) {
-                printf("%d", chunks[i][j]);
-            }
-            printf("\n");
         } else {
             fwrite(chunks[i], 1, sizeof(buffer)-1, file);
-
-            printf("Pacote %d: Course B\n", i);
-            for (int j = 0; j < sizeof(buffer)-1; j++) {
-                printf("%d", chunks[i][j]);
-            }
-            printf("\n");
         }
     }
-
-    //fclose(file);
-
-    // if ((file = fopen(savepath, "rb")) == NULL) {
-    //     perror("Não foi possível abrir o arquivo");
-    //     exit(EXIT_FAILURE);
-    // }
 
     if (fseek(file, 0, SEEK_END) != 0) {
         perror("Erro ao percorrer arquivo");

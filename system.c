@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
+#include <math.h>
 
 const int buffer_size = 2048;
 const int udp_buffer_size = 64000;
@@ -177,6 +178,7 @@ void send_music_to_client(struct Conn * conn, char *filename) {
     // Envia porta udp, tamanho do arquivo e seu nome por tcp
     char tcp_buffer[buffer_size];
     memset(tcp_buffer, '\0', sizeof(tcp_buffer));
+    int num_chunks = ceil((double)file_size / (double)udp_buffer_size);
 
     if (recv(conn->connfd, tcp_buffer, sizeof(tcp_buffer), 0) <= 0) {
         perror("recv error");
@@ -185,7 +187,7 @@ void send_music_to_client(struct Conn * conn, char *filename) {
     }
     printf("%ld %s\n", file_size, tcp_buffer);
     
-    send_to_client(conn, "%d|%ld|%s", UDP_PORT, file_size, filename);
+    send_to_client(conn, "%d|%ld|%d|%s", UDP_PORT, file_size, num_chunks, filename);
 
     // Cria o socket UDP
     int udp_socket;
@@ -219,40 +221,18 @@ void send_music_to_client(struct Conn * conn, char *filename) {
 
     // Envia os dados do arquivo para o cliente
     int packet_number = 0;
-
     size_t bytes_read;
-    //char pckt_n[10];
-    //memset(pckt_n, '\0', sizeof(pckt_n));
     memset(buffer, '\0', sizeof(buffer));
     long int last_bytes_read = 0;
     
+    
     while ((bytes_read = fread(buffer, 1, sizeof(buffer)-1, music_file)) > 0) {
         
-        
-        // printf("Lido: %ld\n", (long int)buffer);
-        // for (long i = 0; i < sizeof(buffer)-1; i++) {
-        //     printf("%d", buffer[i]);
-        // }
-        // printf("\n");
-
-        // printf("Enviado1: %d\n", buffer[sizeof(buffer)-1]);
-        // for (long i = 0; i < sizeof(buffer); i++) {
-        //     printf("%d", buffer[i]);
-        // }
-        // printf("\n");
-        
-        // ultimo byte do buffer é utilizado para ordenacao
+        // ultima posicao do buffer é utilizada para ordenacao do pacote
         buffer[sizeof(buffer)-1] = (unsigned char)packet_number;
 
-        printf("Enviado: %d\n", buffer[sizeof(buffer)-1]);
-        for (long i = 0; i < sizeof(buffer); i++) {
-            printf("%d", buffer[i]);
-        }
-        printf("\n");
-
-        // 5 primeiros digitos do buffer sao posicao do dado
         if (bytes_read <= 0) {
-            perror("Erro ao carregar parte do arquivo");
+            perror("Erro ao carregar buffer do arquivo");
             fclose(music_file);
             close(udp_socket);
             return;
@@ -267,21 +247,13 @@ void send_music_to_client(struct Conn * conn, char *filename) {
 
         packet_number++;
 
-        // if (packet_number == 3){
-        //     break;
-        // }
+        // throtlles 0.1 sec for client to process its buffer
+        usleep(100000);
 
-        if (packet_number % 100 == 0) {
-            // throtlling
-            sleep(1);
-            printf("Enviando %ld bytes pacote %d\n", bytes_read, packet_number);
-        }
-        printf("Enviando %ld bytes pacote %d\n", bytes_read, packet_number);
+        printf("Enviando %ld bytes pacote %d/%d\n", bytes_read, packet_number, num_chunks);
         last_bytes_read = bytes_read;
         memset(buffer, '\0', sizeof(buffer));
     }
-
-    printf("Pacotes enviados %d - last read %ld\n", packet_number, last_bytes_read);
 
     usleep(3);
 
