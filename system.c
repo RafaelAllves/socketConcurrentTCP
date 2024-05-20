@@ -224,6 +224,7 @@ void send_music_to_client(struct Conn * conn, char *filename) {
     //char pckt_n[10];
     //memset(pckt_n, '\0', sizeof(pckt_n));
     memset(buffer, '\0', sizeof(buffer));
+    long int last_bytes_read = 0;
     
     while ((bytes_read = fread(buffer, 1, sizeof(buffer)-1, music_file)) > 0) {
         
@@ -233,12 +234,18 @@ void send_music_to_client(struct Conn * conn, char *filename) {
         //     printf("%d", buffer[i]);
         // }
         // printf("\n");
+
+        // printf("Enviado1: %d\n", buffer[sizeof(buffer)-1]);
+        // for (long i = 0; i < sizeof(buffer); i++) {
+        //     printf("%d", buffer[i]);
+        // }
+        // printf("\n");
         
         // ultimo byte do buffer é utilizado para ordenacao
         buffer[sizeof(buffer)-1] = (unsigned char)packet_number;
 
         printf("Enviado: %d\n", buffer[sizeof(buffer)-1]);
-        for (long i = 0; i < sizeof(buffer)-1; i++) {
+        for (long i = 0; i < sizeof(buffer); i++) {
             printf("%d", buffer[i]);
         }
         printf("\n");
@@ -251,7 +258,7 @@ void send_music_to_client(struct Conn * conn, char *filename) {
             return;
         }
 
-        if (sendto(udp_socket, buffer, bytes_read, 0, (struct sockaddr *) &client_addr, client_addr_len) <= 0) {
+        if (sendto(udp_socket, buffer, sizeof(buffer), 0, (struct sockaddr *) &client_addr, client_addr_len) <= 0) {
             perror("Erro ao enviar o arquivo.");
             fclose(music_file);
             close(udp_socket);
@@ -269,14 +276,19 @@ void send_music_to_client(struct Conn * conn, char *filename) {
             sleep(1);
             printf("Enviando %ld bytes pacote %d\n", bytes_read, packet_number);
         }
+        printf("Enviando %ld bytes pacote %d\n", bytes_read, packet_number);
+        last_bytes_read = bytes_read;
+        memset(buffer, '\0', sizeof(buffer));
     }
 
-    printf("Pacotes enviados %d\n", packet_number);
+    printf("Pacotes enviados %d - last read %ld\n", packet_number, last_bytes_read);
 
     usleep(3);
 
-    char eof = '\0';
-    if (sendto(udp_socket, &eof, sizeof eof, 0, (struct sockaddr *) &client_addr, client_addr_len) <= 0) {
+    // envia tamanho do ultimo bloco
+    long int network_long_int = htonl(last_bytes_read);     //compatibilidade com arquiteturas little e big endian
+
+    if (sendto(udp_socket, &network_long_int, sizeof(long int), 0, (struct sockaddr *) &client_addr, client_addr_len) <= 0) {
         perror("Erro ao finalizar envio.");
         fclose(music_file);
         close(udp_socket);

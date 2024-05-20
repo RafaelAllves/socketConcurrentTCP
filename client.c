@@ -262,34 +262,31 @@ void receive_file(int sockfd, char * server_ip) {
     }
 
     // Recebe os dados do socket e escreve no arquivo
+    ssize_t bytes_received = 0;
     unsigned char buffer[udp_buffer_size];
     memset(buffer, '\0', sizeof(buffer));
+    long int last_bytes_received = 0;
 
     while (1) {
-        ssize_t bytes_received = recvfrom(udp_socket, &buffer, sizeof(buffer), 0, (struct sockaddr *) &server_addr, &server_address_len);
-   
-        int piece_n = buffer[sizeof(buffer)-1];
+        bytes_received = recvfrom(udp_socket, buffer, sizeof(buffer), 0, (struct sockaddr *) &server_addr, &server_address_len);
 
-        if (buffer[0] == '\0') {
-            printf("Transferência concluida.\n");
-            break;
-        }
-
-        // printf("Buffer recebido: ");
+        printf("Bytes recebidos %ld: ", bytes_received);
+        // printf("Buffer recebido %d:\n", buffer[sizeof(buffer)-1]);
         // for (long i = 0; i < bytes_received; i++) {
         //     printf("%d", buffer[i]);
         // }
         // printf("\n");
 
-        memcpy(chunks[piece_n], buffer, sizeof(buffer)-1);
+        if ((bytes_received > 0 && bytes_received < udp_buffer_size)) {
+            // recebe tamanho do ultimo bloco de dados
+            printf("Transferência concluida.\n");
 
-        printf("Na memoria %d: ", piece_n);
-        for (int i = 0; i < sizeof(unsigned char) * (udp_buffer_size-1); i++) {
-            printf("%d", chunks[piece_n][i]);
-        }
-        printf("\n");
+            long int network_long_int;
+            memcpy(&network_long_int, buffer, bytes_received);
+            last_bytes_received = ntohl(network_long_int);
+            break;
 
-        if (bytes_received < 0) {
+        } else if (bytes_received < 0) {
             perror("Erro ao receber dados");
             close(udp_socket);
             fclose(file);
@@ -299,44 +296,41 @@ void receive_file(int sockfd, char * server_ip) {
             
             free(chunks);
             exit(EXIT_FAILURE);
-        } else if (bytes_received < buffer_size && piece_n != num_chunks-1) {
-            printf("Pacote numero %d incompleto\n", piece_n);
         }
+
+        int piece_n = buffer[sizeof(buffer)-1];
+        memcpy(chunks[piece_n], buffer, sizeof(buffer)-1);
+
+        //printf("Na memoria %d: ", piece_n);
+        // for (int i = 0; i < sizeof(unsigned char) * (udp_buffer_size-1); i++) {
+        //     printf("%d", chunks[piece_n][i]);
+        // }
+        // printf("\n");
+
+        memset(buffer, '\0', sizeof(buffer));
     }
 
-    
-    // fwrite(chunks[i], 1, buff_len, file)
-    long empty_packets = 0;
     int buff_len = 0;
+    printf("Bytes recebidos: %ld\n", last_bytes_received);
 
     for (int i = 0; i < num_chunks; i++) {
-        // buff_len = strlen(chunks[i]);
-        // printf("Pacote %d len %d\n", i, buff_len);
 
-        // // for (int j = 0; j < buff_len; j++) {
-        // //     printf("%c", chunks[i][j]);
-        // // }
-        // // printf("\n");
+        if (i == num_chunks-1) {
+            fwrite(chunks[i], 1, last_bytes_received, file);
 
-        // if (buff_len != udp_buffer_size-1) {
-        //     printf("Pacote %d incompleto\n", i);
-        // }
-
-        if (chunks[i][0] != '\0') {
-            fwrite(chunks[i], 1, buff_len, file);
-            //printf("Pacote %d: escrito como %s\n", i, chunks[i]);
-            printf("Pacote %d enchido\n", i);
-            for (int j = 0; j < sizeof(unsigned char) * (udp_buffer_size-1); j++) {
+            printf("Pacote %d: Course A\n", i);
+            for (int j = 0; j < last_bytes_received; j++) {
                 printf("%d", chunks[i][j]);
             }
             printf("\n");
         } else {
-            printf("Pacote %d vazio\n", i);
-            for (int j = 0; j < sizeof(unsigned char) * (udp_buffer_size-1); j++) {
+            fwrite(chunks[i], 1, sizeof(buffer)-1, file);
+
+            printf("Pacote %d: Course B\n", i);
+            for (int j = 0; j < sizeof(buffer)-1; j++) {
                 printf("%d", chunks[i][j]);
             }
             printf("\n");
-            empty_packets++;
         }
     }
 
@@ -362,7 +356,7 @@ void receive_file(int sockfd, char * server_ip) {
     }    
 
     if (final_size != file_size)
-        printf("Arquivo corrompido %ld/%ld. %ld pacotes vazios\n", final_size, file_size, empty_packets);
+        printf("Arquivo corrompido %ld/%ld.\n", final_size, file_size);
     else
         printf("O arquivo foi recebido com sucesso.\n");
 
