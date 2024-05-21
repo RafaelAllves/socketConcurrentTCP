@@ -36,26 +36,6 @@ void send_to_server(int sockfd, const char *format, ...) {
     }
 }
 
-void receive_music(int sockfd) {
-    FILE *fp = fopen("./musicas_recebidas/received_music.mp3", "wb");
-    if (fp == NULL) {
-        printf("\nErro ao abrir o arquivo!\n\n");
-        return;
-    }
-
-    char buffer[1024];
-    int bytes_received;
-    struct sockaddr_in server_address;
-    socklen_t address_len = sizeof(server_address);
-    while ((bytes_received = recvfrom(sockfd, buffer, 1024, 0, (struct sockaddr *)&server_address, &address_len)) > 0) {
-        // printf("bytes_received: %d", bytes_received);
-        fwrite(buffer, sizeof(char), bytes_received, fp);
-    }
-
-    fclose(fp);
-    printf("\nArquivo recebido com sucesso!\n\n");
-}
-
 void send_file(int sockfd, char *filename) {
     char buffer[1024];
     char filepath[1024] = "./";
@@ -160,6 +140,46 @@ int connect_to_server(char * server_addr, int sock_type, int opt_name) {
     freeaddrinfo(server_info);
 
     return sockfd;
+}
+
+void receive_music(int sockfd) {
+
+    long total_size;
+    recvfrom(sockfd, &total_size, sizeof(total_size), 0, NULL, NULL);
+
+    char filename[50];
+    recvfrom(sockfd, &filename, sizeof(filename), 0, NULL, NULL);
+
+    printf("Recebendo arquivo: %s\n", filename);
+
+    char filepath[100] = "./musicas_recebidas/";
+    strcat(filepath, filename);
+    strcat(filepath, ".mp3"); // Add the ".mp3" extension
+    FILE *fp = fopen(filepath, "wb");
+    if (fp == NULL) {
+        printf("\nErro ao abrir o arquivo!\n\n");
+        return;
+    }
+
+    char buffer[1024];
+    int bytes_received;
+    long bytes_received_total = 0;
+    struct sockaddr_in server_address;
+    socklen_t address_len = sizeof(server_address);
+    while ((bytes_received = recvfrom(sockfd, buffer, 1024, 0, (struct sockaddr *)&server_address, &address_len)) > 0) {
+        // printf("bytes_received: %d", bytes_received);
+        fwrite(buffer, sizeof(char), bytes_received, fp);
+        bytes_received_total += bytes_received;
+        if (bytes_received_total >= total_size) {
+            break;
+        }
+        
+    }
+    memset(buffer, '\0', sizeof(buffer));
+    // printf("bytes_received_total: %ld\n", bytes_received_total);
+
+    fclose(fp);
+    printf("\nArquivo recebido com sucesso!\n\n");
 }
 
 int main(int argc, char *argv[]) {

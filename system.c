@@ -514,9 +514,11 @@ void send_file(struct Conn * conn) {
 
 
 
-    // FILE *fp = fopen(musics.musics->filename, "rb");
     send_to_client(conn, "\nMusica encontrada! \ufeff\ufeff\ufeff\n");
-    FILE *fp = fopen("./musicas/1.mp3", "rb");
+
+    char filename[50];
+    sprintf(filename, "./musicas/%d.mp3", searchId);
+    FILE *fp = fopen(filename, "rb");
     
     if (fp == NULL) {
         perror("Erro ao abrir o arquivo");
@@ -529,20 +531,18 @@ void send_file(struct Conn * conn) {
     long total_size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
-    printf("total_size: %ld\n", total_size);
+    // Envie o tamanho do arquivo primeiro
+    sendto(conn->connfd, &total_size, sizeof(total_size), 0, (struct sockaddr *)&conn->client_address, conn->address_len);
+    
+    // Envia music->title
+    sendto(conn->connfd, musics.musics->title, strlen(musics.musics->title), 0, (struct sockaddr *)&conn->client_address, conn->address_len);
+
+
 
     char buffer[1024];
     int bytes_read;
     long bytes_sent = 0;
-    // while ((bytes_read = fread(buffer, sizeof(char), 1024, fp)) > 0) {
-    //     if (sendto(conn->connfd, buffer, bytes_read, 0, (struct sockaddr *)&conn->client_address, conn->address_len) == -1) {
-    //         perror("Erro ao enviar o arquivo!\n\n");
-    //         send_to_client(conn, "\nErro ao enviar o arquivo!\n\n");
-    //         fclose(fp);
-    //         return;
-    //     }
-    //     // printf("bytes_send: %d", bytes_read);
-    // }
+
     while (bytes_sent < total_size) {
         bytes_read = fread(buffer, sizeof(char), 1024, fp);
         if (sendto(conn->connfd, buffer, bytes_read, 0, (struct sockaddr *)&conn->client_address, conn->address_len) == -1) {
@@ -552,25 +552,23 @@ void send_file(struct Conn * conn) {
             return;
         }
         bytes_sent += bytes_read;
-        // printf("bytes_sent: %ld\n", bytes_sent);
-        // printf("bytes_sent < total_size: %d\n", bytes_sent < total_size);
     }
 
     printf("bytes_sent: %ld\n", bytes_sent);
 
 
     fclose(fp);
-    send_to_client(conn, "\nArquivo enviado com sucesso!\n\n");
-
+    send_to_client(conn, "\nArquivo baixado com sucesso!\n\n");
     
-    screen_pause(conn);
+    send_to_client(conn, "\ufeff\n");
+    return;
 }
 
 /* Server Initialization */
 
 void show_menu(struct Conn * conn, int admin_mode) {
     if (admin_mode) {
-        send_to_client(conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
+        send_to_client(conn, "\n - - - - - - - - - - - - - - - - - -\n\n"
             "1. Adicionar uma musica\n"
             "2. Remover uma musica\n"
             "3. Listar musicas por ano\n"
@@ -583,7 +581,7 @@ void show_menu(struct Conn * conn, int admin_mode) {
             "Escolha uma ação (numero): \ufeff\n"
         );
     } else {
-        send_to_client(conn, "\n - - - - - -  Socket Concurrent UDP  - - - - - -\n\n"
+        send_to_client(conn, "\n - - - - - - - - - - - - - - - - - -\n\n"
             "1. Listar musicas por ano\n"
             "2. Listar musicas por ano e idioma\n"
             "3. Listar musicas por genero\n"
