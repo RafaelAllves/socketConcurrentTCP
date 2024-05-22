@@ -16,7 +16,7 @@
 const int admin_flag = 1;       // 1 for admin, 0 for normal user
 const int buffer_size = 2048;
 const int udp_buffer_size = 64000;
-const char filepath[] = "./musicas";
+const char filepath[] = "./cliente";
 
 // Gets the client's IPv4 or IPv6 address
 void *get_in_addr(struct sockaddr *sa) {
@@ -256,6 +256,17 @@ void receive_file(int sockfd, char * server_ip) {
     socklen_t server_address_len = sizeof(server_addr);
     char sync_msg[] = "Iniciando transferencia...\ufeff\n";
 
+    //debug
+    char server_ip_string[INET_ADDRSTRLEN];
+    strcpy(server_ip_string, inet_ntoa(server_addr.sin_addr));
+    printf("My server IP: %s - len %d\n", server_ip_string, server_address_len);
+    char client_ip_string[INET_ADDRSTRLEN];
+    strcpy(client_ip_string, inet_ntoa(client_addr.sin_addr));
+    printf("My client IP: %s\n", client_ip_string);
+
+
+
+
     if (sendto(udp_socket, sync_msg, sizeof(sync_msg), 0, (struct sockaddr *) &server_addr, server_address_len) == -1) {
         perror("Erro ao sincronizar inicio da transferência");
         fclose(file);
@@ -303,7 +314,7 @@ void receive_file(int sockfd, char * server_ip) {
         // adquire posicao do pacote
         int piece_n = buffer[sizeof(buffer)-1];
 
-        printf("Foram recebidos %ld bytes em pacote %d/%d\n", bytes_received, piece_n, num_chunks);
+        printf("Foram recebidos %ld bytes em pacote %d/%d\n", bytes_received, piece_n+1, num_chunks);
 
         // armazena pacote no espaço alocado para ele
         memcpy(chunks[piece_n], buffer, sizeof(buffer)-1);

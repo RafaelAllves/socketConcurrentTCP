@@ -8,8 +8,8 @@
 
 const int buffer_size = 2048;
 const int udp_buffer_size = 64000;
-const char DB_NAME[] = "dev.sqlite3";
-const char filepath[] = "./musics";
+const char DB_NAME[] = "db.sqlite3";
+const char filepath[] = "./servidor";
 
 #define UDP_PORT 3492
 
@@ -24,7 +24,6 @@ struct Music {
     char chore[255];
     int year;
     char filename[100];  // campo para o nome do arquivo da música
-    char *content;  // novo campo para o conteúdo da música
     struct Music *next;
 };
 
@@ -209,6 +208,17 @@ void send_music_to_client(struct Conn * conn, char *filename) {
 
     // recupera ip do cliente
     unsigned char buffer[udp_buffer_size];
+
+
+    //debug
+    char server_ip_string[INET_ADDRSTRLEN];
+    strcpy(server_ip_string, inet_ntoa(server_addr.sin_addr));
+    printf("My server IP: %s\n", server_ip_string);
+    char client_ip_string[INET_ADDRSTRLEN];
+    strcpy(client_ip_string, inet_ntoa(client_addr.sin_addr));
+    printf("My client IP: %s - len %d\n", client_ip_string, client_addr_len);
+
+
 
     if (recvfrom(udp_socket, &buffer, sizeof(buffer), 0, (struct sockaddr *) &client_addr, &client_addr_len) <= 0) {
         perror("recv error");
